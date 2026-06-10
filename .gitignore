@@ -1,0 +1,8 @@
+node_modules/
+dist/
+public/tiles/
+
+# Private deployment files — never commit
+.env
+.env.*
+compose.traefik.yml

@@ -1,0 +1,22 @@
+{
+  "name": "track-map",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "tile": "mkdir -p public/tiles && vips dzsave assets/tremblant.jpg public/tiles/tremblant --tile-size 256 --overlap 1 --suffix .jpg[Q=82]",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "openseadragon": "^4.1.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/openseadragon": "^3.0.10",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11",
+    "vite-plugin-pwa": "^0.20.5"
+  }
+}

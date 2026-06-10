@@ -1,0 +1,352 @@
+/* Colors come from theme.css (var(--c-*)). Keep this file structural; put
+ * palette changes in theme.css. */
+
+/* ── Reset & base ─────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background: var(--c-bg);
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	color: var(--c-text-bright);
+}
+
+/* ── Viewer container ─────────────────────────────────────────────────────── */
+#viewer {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+/* ── SVG layer groups – opacity cross-fade ────────────────────────────────── */
+.layer-group {
+	transition: opacity 200ms ease;
+}
+
+/* ── OSD navigator (minimap) ──────────────────────────────────────────────── */
+/* OSD gives the navigator element the class `navigator` (not
+ * `openseadragon-navigator`). Size is set in JS (viewer.ts sizeNavigator) and
+ * visibility is toggled via the control's setVisible(). */
+#viewer .navigator {
+	z-index: 50 !important;
+	border-radius: 6px !important;
+	overflow: hidden !important;
+	cursor: pointer !important;
+}
+
+/* ── FAB (floating action button) ─────────────────────────────────────────── */
+.fab {
+	position: fixed;
+	width: 56px;
+	height: 56px;
+	border-radius: 50%;
+	background: var(--c-fab);
+	color: var(--c-fab-icon); /* drives the icon's currentColor */
+	border: none;
+	cursor: pointer;
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: var(--shadow-fab);
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	transition:
+		top 200ms ease,
+		right 200ms ease,
+		bottom 200ms ease,
+		left 200ms ease,
+		transform 120ms ease;
+}
+
+.fab:active {
+	transform: scale(0.92);
+}
+
+/* ── Panel scrim (mobile backdrop) ───────────────────────────────────────── */
+.panel-scrim {
+	display: none;
+	position: fixed;
+	inset: 0;
+	background: var(--c-scrim);
+	z-index: 90;
+}
+.panel-scrim.visible {
+	display: block;
+}
+
+/* ── Panel – mobile bottom sheet ─────────────────────────────────────────── */
+.panel {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	max-height: 72vh;
+	overflow-y: auto;
+	background: var(--c-surface);
+	border-radius: 16px 16px 0 0;
+	z-index: 100;
+	transform: translateY(100%);
+	opacity: 0;
+	transition:
+		transform 220ms ease,
+		opacity 220ms ease;
+	overscroll-behavior: contain;
+}
+
+.panel.open {
+	transform: translateY(0);
+	opacity: 1;
+}
+
+/* ── Panel – desktop side panel ──────────────────────────────────────────── */
+@media (min-width: 768px) {
+	.panel-scrim.visible {
+		display: none;
+	}
+
+	.panel {
+		top: 0;
+		bottom: 0;
+		left: 0;
+		right: auto;
+		width: 288px;
+		max-height: 100vh;
+		border-radius: 0;
+		transform: translateX(-100%);
+		box-shadow: 4px 0 20px rgba(0, 0, 0, 0.6); /* mirrored: shadow on the right edge */
+	}
+	.panel.open {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
+
+/* ── Panel header (title + share + language + close) ──────────────────────── */
+.panel-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 16px 20px 12px;
+	border-bottom: 1px solid var(--c-divider);
+	position: sticky;
+	top: 0;
+	background: var(--c-surface);
+	z-index: 1;
+}
+
+.panel-title {
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	margin-right: auto; /* pushes the share button to the right edge */
+}
+
+/* Share button — QR icon + label styled as a single button */
+.share-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: var(--c-surface-2);
+	color: var(--c-text);
+	border: 1px solid var(--c-border);
+	border-radius: 8px;
+	padding: 6px 12px;
+	font-size: 13px;
+	cursor: pointer;
+	transition: background 120ms;
+}
+.share-btn:hover {
+	background: var(--c-surface-3);
+}
+
+.panel-body {
+	padding: 12px 16px 24px;
+}
+
+/* ── Action buttons row (All on / All off / Reset view) ───────────────────── */
+.panel-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+
+.btn {
+	background: var(--c-surface-2);
+	color: var(--c-text);
+	border: 1px solid var(--c-border);
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 13px;
+	transition: background 120ms;
+}
+.btn:hover {
+	background: var(--c-surface-3);
+}
+
+.btn-sm {
+	padding: 6px 12px;
+}
+
+/* ── Language toggle (segmented EN/FR) ────────────────────────────────────── */
+.lang-toggle {
+	display: inline-flex;
+	border: 1px solid var(--c-border);
+	border-radius: 8px;
+	overflow: hidden;
+	margin-bottom: 16px;
+}
+
+.lang-btn {
+	background: var(--c-surface-2);
+	color: var(--c-text);
+	border: none;
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 600;
+	padding: 6px 10px;
+	transition: background 120ms;
+}
+.lang-btn + .lang-btn {
+	border-left: 1px solid var(--c-border);
+}
+.lang-btn:hover {
+	background: var(--c-surface-3);
+}
+.lang-btn.active {
+	background: var(--c-overlay);
+	color: var(--c-text-bright);
+}
+
+/* ── Layer rows (incl. the minimap toggle row) ────────────────────────────── */
+.layer-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.layer-row {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.toggle-label {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	cursor: pointer;
+}
+
+.layer-toggle,
+.minimap-toggle {
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	accent-color: var(--c-accent);
+	cursor: pointer;
+}
+
+.layer-name {
+	font-size: 15px;
+}
+
+.opacity-slider {
+	width: 100%;
+	height: 4px;
+	accent-color: var(--c-accent);
+	cursor: pointer;
+}
+
+/* Minimap toggle row sits above the layers, separated by a divider */
+.minimap-row {
+	padding-bottom: 14px;
+	margin-bottom: 14px;
+	border-bottom: 1px solid var(--c-divider);
+}
+
+/* ── Share modal ──────────────────────────────────────────────────────────── */
+.modal-scrim {
+	position: fixed;
+	inset: 0;
+	background: var(--c-scrim-strong);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 300;
+}
+
+.modal-scrim[hidden] {
+	display: none;
+}
+
+.modal-card {
+	background: var(--c-surface);
+	border-radius: 16px;
+	padding: 8px 8px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	max-width: 440px;
+	width: 96%;
+	max-height: 96vh; /* fit within the viewport (esp. landscape) */
+	overflow-y: auto; /* scroll if the link is long on a short screen */
+	box-shadow: var(--shadow-modal);
+}
+
+#qr-canvas {
+	border-radius: 8px;
+	/* The qrcode lib sets inline width/height; override so it stays square.
+   * Cap by both width and viewport height so it shrinks in landscape. */
+	width: 100% !important;
+	height: auto !important;
+	max-width: min(380px, 60vh);
+	aspect-ratio: 1 / 1;
+}
+
+.share-url {
+	margin: 0;
+	font-size: 12px;
+	color: var(--c-muted);
+	word-break: break-all;
+	text-align: center;
+	max-width: 100%;
+	user-select: text;
+}
+
+.modal-actions {
+	display: flex;
+	gap: 10px;
+}
+
+.copy-btn,
+.modal-close {
+	background: var(--c-surface-2);
+	color: var(--c-text);
+	border: 1px solid var(--c-border);
+	border-radius: 8px;
+	padding: 8px 18px;
+	font-size: 14px;
+	cursor: pointer;
+	transition: background 120ms;
+}
+.copy-btn:hover,
+.modal-close:hover {
+	background: var(--c-surface-3);
+}

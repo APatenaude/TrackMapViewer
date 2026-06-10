@@ -1,0 +1,31 @@
+:root {
+	/* Backdrops */
+	--c-bg: #000; /* page / viewer backdrop behind the map */
+	--c-surface: #0f1114; /* panel, header, and modal background */
+	--c-surface-2: #1c1f24; /* buttons, segmented toggle, slider track */
+	--c-surface-3: #2a2e35; /* button hover */
+	--c-overlay: #3c414a; /* active/selected segmented button */
+
+	/* Text */
+	--c-text: #ececec; /* default UI text (buttons, labels) */
+	--c-text-bright: #ffffff; /* high-emphasis body text */
+	--c-muted: #a09e9e; /* secondary text (share URL, close icon) */
+
+	/* Accent */
+	--c-accent: #c4dcff; /* checkboxes, sliders, interactive highlights */
+
+	/* Floating action button */
+	--c-fab: var(--c-accent); /* FAB background */
+	--c-fab-icon: #030303; /* FAB icon (dark, for contrast on the accent) */
+
+	/* Lines & overlays */
+	--c-border: rgba(255, 255, 255, 0.1); /* hairline borders on controls */
+	--c-divider: rgba(255, 255, 255, 0.08); /* header bottom divider */
+	--c-scrim: rgba(0, 0, 0, 0.5); /* mobile panel backdrop */
+	--c-scrim-strong: rgba(0, 0, 0, 0.75); /* share modal backdrop */
+
+	/* Shadows */
+	--shadow-fab: 0 4px 12px rgba(0, 0, 0, 0.5);
+	--shadow-panel: -4px 0 20px rgba(0, 0, 0, 0.6);
+	--shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.7);
+}

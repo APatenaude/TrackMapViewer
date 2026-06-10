@@ -1,0 +1,10 @@
+# Source images are committed normally (NOT via Git LFS), so a plain `git clone`
+# (e.g. Portainer building from this repo, or `docker build` from a git context)
+# gets the real file instead of a 134-byte LFS pointer — which would break the
+# vips tile generation in the Docker build.
+
+# Normalize line endings; keep shell scripts LF so they run in the Alpine build.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

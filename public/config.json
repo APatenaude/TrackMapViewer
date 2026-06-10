@@ -1,0 +1,47 @@
+{
+	"imageWidth": 4500,
+	"imageHeight": 8192,
+	"svgScale": 3.779528,
+	"svgPath": "/tremblant.svg",
+	"tileSource": "/tiles/tremblant.dzi",
+	"title": { "en": "Track Map", "fr": "Carte circuit" },
+	"trackName": "Tremblant",
+	"analytics": {
+		"scriptUrl": "https://analytics.track.example.com/script.js",
+		"websiteId": "REPLACE_WITH_UMAMI_WEBSITE_ID"
+	},
+	"layers": [
+		{
+			"id": "corner_numbers",
+			"label": { "en": "Corner numbers", "fr": "Numéros de virage" },
+			"defaultOn": true,
+			"defaultOpacity": 1.0
+		},
+		{
+			"id": "racing_line",
+			"label": { "en": "Driving line", "fr": "Ligne de conduite" },
+			"defaultOn": true,
+			"defaultOpacity": 1.0
+		},
+		{ "id": "cars", "label": { "en": "Cars", "fr": "Voitures" }, "defaultOn": true, "defaultOpacity": 1.0 },
+		{ "id": "apex", "label": { "en": "Apexes", "fr": "Apex" }, "defaultOn": true, "defaultOpacity": 1.0 },
+		{
+			"id": "passing_zones",
+			"label": { "en": "Passing zones", "fr": "Zones de dépassement" },
+			"defaultOn": true,
+			"defaultOpacity": 1.0
+		},
+		{
+			"id": "references",
+			"label": { "en": "Reference points", "fr": "Points de repère" },
+			"defaultOn": true,
+			"defaultOpacity": 1.0
+		},
+		{
+			"id": "compression_crest",
+			"label": { "en": "Compressions & crests", "fr": "Compressions et crêtes" },
+			"defaultOn": true,
+			"defaultOpacity": 1.0
+		}
+	]
+}
