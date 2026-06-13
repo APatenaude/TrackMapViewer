@@ -57,6 +57,10 @@ export function initViewer(
 		gestureSettingsTouch: {
 			pinchToZoom: true,
 			flickEnabled: true,
+			// Tame the post-release glide: require a faster flick to trigger
+			// momentum (default 120) and carry far less of it (default 0.25).
+			flickMinSpeed: 300,
+			flickMomentum: 0.1,
 			dblClickToZoom: false,
 			clickToZoom: false,
 		} as OpenSeadragon.GestureSettings,
