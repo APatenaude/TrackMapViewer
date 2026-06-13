@@ -32,8 +32,6 @@ export interface AppConfig {
 	analytics?: AnalyticsConfig;
 }
 
-export type FabCorner = "tl" | "tr" | "bl" | "br";
-
 export interface LayerState {
 	visible: boolean;
 	opacity: number;
@@ -42,7 +40,6 @@ export interface LayerState {
 export interface PersistedState {
 	view: { x: number; y: number; zoom: number } | null;
 	layers: Record<string, LayerState>;
-	fabCorner: FabCorner;
 	lang: Lang;
 	minimap: boolean;
 }

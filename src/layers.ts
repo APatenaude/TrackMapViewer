@@ -1,8 +1,10 @@
-import type { AppConfig, Lang, PersistedState } from "./types.js";
+import { track } from "./analytics.js";
+import { getLang, pick, registerI18n, setLang } from "./i18n.js";
 import { openShareModal } from "./share.js";
 import { encodeShareState } from "./shareState.js";
-import { track } from "./analytics.js";
-import { pick, getLang, setLang, registerI18n } from "./i18n.js";
+import type { AppConfig, Lang, PersistedState } from "./types.js";
+
+const INSTALL_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>`;
 
 export interface LayersOptions {
 	/** Called when the panel opens/closes (e.g. to move the FAB out of the way). */
@@ -50,7 +52,11 @@ export function initLayers(
 
 	panel.innerHTML = `
     <div class="panel-header">
-      <span class="panel-title" data-i18n="layers"></span>
+      <div class="lang-toggle" role="group" aria-label="Language">
+        <button class="lang-btn" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="fr">FR</button>
+      </div>
+      <button class="icon-btn install-btn" data-i18n-aria="installApp" hidden>${INSTALL_ICON}</button>
       <button class="share-btn panel-share">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
           <path d="M3 11h8V3H3v8zm2-6h4v4H5V5z"/>
@@ -62,10 +68,6 @@ export function initLayers(
       </button>
     </div>
     <div class="panel-body">
-      <div class="lang-toggle" role="group" aria-label="Language">
-        <button class="lang-btn" data-lang="en">EN</button>
-        <button class="lang-btn" data-lang="fr">FR</button>
-      </div>
       <div class="layer-row minimap-row">
         <label class="toggle-label">
           <input type="checkbox" class="minimap-toggle" />
@@ -190,7 +192,19 @@ export function initLayers(
 		});
 	});
 
+	// Keep in sync with the .panel transition duration in style.css.
+	const CLOSE_MS = 240;
+	let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
 	function openPanel() {
+		if (hideTimer !== null) {
+			clearTimeout(hideTimer);
+			hideTimer = null;
+		}
+		// Take it out of display:none, then force a reflow so the slide-in animates
+		// from the closed state rather than snapping straight to open.
+		panel.style.display = "";
+		void panel.offsetHeight;
 		panel.classList.add("open");
 		scrim.classList.add("visible");
 		opts.onOpenChange?.(true);
@@ -200,6 +214,13 @@ export function initLayers(
 		panel.classList.remove("open");
 		scrim.classList.remove("visible");
 		opts.onOpenChange?.(false);
+		// After the slide-out, fully remove the sheet from the render tree. While it
+		// lingered at opacity:0 iOS Safari could still sample its white behind the
+		// bottom URL bar and stay tinted; display:none forces a re-sample of the map.
+		hideTimer = setTimeout(() => {
+			panel.style.display = "none";
+			hideTimer = null;
+		}, CLOSE_MS);
 	}
 
 	function togglePanel() {
@@ -212,12 +233,14 @@ export function initLayers(
 	document.addEventListener("pointerdown", (e) => {
 		if (!panel.classList.contains("open")) return;
 		const t = e.target as HTMLElement;
-		if (panel.contains(t) || t.closest(".fab")) return;
+		if (panel.contains(t) || t.closest(".fab") || t.closest(".fab-mini") || t.closest(".modal-scrim")) return;
 		closePanel();
 	});
 
 	document.body.appendChild(scrim);
 	document.body.appendChild(panel);
+	// Start fully hidden (not just transparent) so it can't be sampled while closed.
+	panel.style.display = "none";
 
 	return { openPanel, closePanel, togglePanel };
 }

@@ -1,31 +1,37 @@
+/* Single palette. Light UI chrome (drawer, icons, modals) on a dark backdrop.
+ * style.css stays structural — all palette lives here as var(--c-*). */
 :root {
 	/* Backdrops */
-	--c-bg: #000; /* page / viewer backdrop behind the map */
-	--c-surface: #0f1114; /* panel, header, and modal background */
-	--c-surface-2: #1c1f24; /* buttons, segmented toggle, slider track */
-	--c-surface-3: #2a2e35; /* button hover */
-	--c-overlay: #3c414a; /* active/selected segmented button */
+	--c-bg: #000; /* dark page / viewer backdrop behind the map */
+	--c-surface: #f7f8fa; /* panel, header, and modal background (light) */
+	--c-surface-2: #e9ecf1; /* buttons, segmented toggle, slider track */
+	--c-surface-3: #dde1e8; /* button hover */
+	--c-overlay: #c7d2e3; /* active/selected segmented button */
 
 	/* Text */
-	--c-text: #ececec; /* default UI text (buttons, labels) */
-	--c-text-bright: #ffffff; /* high-emphasis body text */
-	--c-muted: #a09e9e; /* secondary text (share URL, close icon) */
+	--c-text: #1a1d21; /* default UI text (buttons, labels) */
+	--c-text-bright: #000000; /* high-emphasis body text */
+	--c-muted: #5b6068; /* secondary text (share URL, close icon) */
 
 	/* Accent */
-	--c-accent: #c4dcff; /* checkboxes, sliders, interactive highlights */
+	--c-accent: #0b5cd6; /* checkboxes, sliders, interactive highlights */
 
 	/* Floating action button */
 	--c-fab: var(--c-accent); /* FAB background */
-	--c-fab-icon: #030303; /* FAB icon (dark, for contrast on the accent) */
+	--c-fab-icon: #ffffff; /* FAB icon (white, for contrast on the accent) */
 
 	/* Lines & overlays */
-	--c-border: rgba(255, 255, 255, 0.1); /* hairline borders on controls */
-	--c-divider: rgba(255, 255, 255, 0.08); /* header bottom divider */
-	--c-scrim: rgba(0, 0, 0, 0.5); /* mobile panel backdrop */
-	--c-scrim-strong: rgba(0, 0, 0, 0.75); /* share modal backdrop */
+	--c-border: rgba(0, 0, 0, 0.15); /* hairline borders on controls */
+	--c-divider: rgba(0, 0, 0, 0.1); /* header bottom divider */
+	--c-scrim: rgba(0, 0, 0, 0.35); /* mobile panel backdrop */
+	--c-scrim-strong: rgba(0, 0, 0, 0.55); /* share modal backdrop */
 
 	/* Shadows */
-	--shadow-fab: 0 4px 12px rgba(0, 0, 0, 0.5);
-	--shadow-panel: -4px 0 20px rgba(0, 0, 0, 0.6);
-	--shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.7);
+	--shadow-fab: 0 4px 12px rgba(0, 0, 0, 0.25);
+	--shadow-panel: -4px 0 20px rgba(0, 0, 0, 0.2);
+	--shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+	/* Draw mode pen */
+	--c-pen: #ff3b30; /* high-vis ink */
+	--c-pen-casing: rgba(255, 255, 255, 0.92); /* contrast outline under the ink */
 }

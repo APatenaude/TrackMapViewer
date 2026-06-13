@@ -4,9 +4,9 @@
   "type": "module",
   "scripts": {
     "tile": "mkdir -p public/tiles && vips dzsave assets/tremblant.jpg public/tiles/tremblant --tile-size 256 --overlap 1 --suffix .jpg[Q=82]",
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --host"
   },
   "dependencies": {
     "openseadragon": "^4.1.0",

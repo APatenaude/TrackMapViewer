@@ -47,7 +47,7 @@ export function initViewer(
 		element: container,
 		tileSources: cfg.tileSource ?? "/tiles/track.dzi",
 		showNavigator: true,
-		navigatorPosition: "TOP_RIGHT",
+		navigatorPosition: "TOP_LEFT",
 		navigatorAutoFade: false,
 		navigatorSizeRatio: 0.1, // initial size; sizeNavigator() takes over responsively
 		// Allow zooming in well past native pixels (default ~1.1 capped desktop too low)

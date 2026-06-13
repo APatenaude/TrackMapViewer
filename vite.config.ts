@@ -8,7 +8,7 @@ export default defineConfig({
 			manifest: {
 				name: "Track Map",
 				short_name: "TrackMap",
-				theme_color: "#0F1114",
+				theme_color: "#000000",
 				background_color: "#000000",
 				display: "standalone",
 				icons: [

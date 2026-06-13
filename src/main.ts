@@ -1,16 +1,21 @@
-import "./theme.css";
-import "./style.css";
-import type { AppConfig } from "./types.js";
-import { loadState, saveState, debouncedSaveState } from "./state.js";
-import { initViewer } from "./viewer.js";
-import { initLayers, applyAllLayerStates } from "./layers.js";
-import { initFab } from "./fab.js";
-import { initShare } from "./share.js";
 import { initAnalytics } from "./analytics.js";
+import { initDraw } from "./draw.js";
+import { initFab } from "./fab.js";
+import { initI18n, pick, registerI18n, translateTree } from "./i18n.js";
+import { initInstall, setupInstallCapture } from "./install.js";
+import { applyAllLayerStates, initLayers } from "./layers.js";
+import { initShare } from "./share.js";
 import { decodeShareState } from "./shareState.js";
-import { initI18n, registerI18n, translateTree, pick } from "./i18n.js";
+import { debouncedSaveState, loadState, saveState } from "./state.js";
+import "./style.css";
+import "./theme.css";
+import type { AppConfig } from "./types.js";
+import { initViewer } from "./viewer.js";
 
 async function init(): Promise<void> {
+	// Capture the PWA install prompt first — it can fire before config resolves.
+	setupInstallCapture();
+
 	const cfg: AppConfig = await fetch("/config.json").then((r) => r.json());
 
 	initAnalytics(cfg);
@@ -34,7 +39,7 @@ async function init(): Promise<void> {
 	}
 
 	const container = document.getElementById("viewer")!;
-	const { svgEl, setMinimapVisible } = initViewer(container, cfg, svgDoc, state, (x, y, zoom) => {
+	const { viewer, svgEl, setMinimapVisible } = initViewer(container, cfg, svgDoc, state, (x, y, zoom) => {
 		state.view = { x, y, zoom };
 		debouncedSaveState(state);
 	});
@@ -44,11 +49,7 @@ async function init(): Promise<void> {
 
 	// FAB toggles the panel; the panel moves the FAB out of its own way when open.
 	let togglePanel = (): void => {};
-	const fab = initFab(
-		state,
-		() => togglePanel(),
-		() => saveState(state),
-	);
+	const fab = initFab(() => togglePanel());
 	const layers = initLayers(cfg, svgEl, state, () => saveState(state), {
 		onOpenChange: (open) => fab.setPanelOpen(open),
 		setMinimapVisible,
@@ -56,6 +57,10 @@ async function init(): Promise<void> {
 	togglePanel = layers.togglePanel;
 
 	initShare();
+
+	// Draw-mode toggle (mini-FAB satellite) + PWA install button (drawer header).
+	initDraw(viewer, svgEl, fab, layers.closePanel);
+	initInstall(document.querySelector<HTMLButtonElement>(".install-btn")!);
 
 	// Apply UI text now and on every language change (covers panel, modal, FAB, title).
 	registerI18n(() => {

@@ -14,6 +14,16 @@ const MESSAGES: Record<Lang, Record<string, string>> = {
 		layersPanel: "Options",
 		openLayersPanel: "Open options",
 		minimap: "Minimap",
+		drawMode: "Draw on map",
+		clearDrawing: "Clear drawing",
+		installApp: "Install app",
+		installTitle: "Install this app",
+		installGeneric:
+			"Open your browser menu — or the install icon in the address bar — and choose “Install” or “Add to Home screen”.",
+		installTitleIos: "Add to Home Screen",
+		installIos1: "Tap the Share button {icon} at the bottom of Safari",
+		installIos2: "Scroll down and tap “Add to Home Screen”",
+		installIos3: "Tap “Add” in the top-right",
 	},
 	fr: {
 		layers: "Options",
@@ -27,6 +37,16 @@ const MESSAGES: Record<Lang, Record<string, string>> = {
 		layersPanel: "Options",
 		openLayersPanel: "Ouvrir les options",
 		minimap: "Minicarte",
+		drawMode: "Dessiner sur la carte",
+		clearDrawing: "Effacer le dessin",
+		installApp: "Installer l'application",
+		installTitle: "Installer cette application",
+		installGeneric:
+			"Ouvrez le menu de votre navigateur — ou l'icône d'installation dans la barre d'adresse — et choisissez « Installer » ou « Ajouter à l'écran d'accueil ».",
+		installTitleIos: "Sur l'écran d'accueil",
+		installIos1: "Touchez le bouton Partager {icon} en bas de Safari",
+		installIos2: "Faites défiler et touchez « Sur l'écran d'accueil »",
+		installIos3: "Touchez « Ajouter » en haut à droite",
 	},
 };
 
