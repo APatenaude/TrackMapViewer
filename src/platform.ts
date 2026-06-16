@@ -1,7 +1,5 @@
-// Platform / browser detection for deciding whether (and how) the app can be
-// installed as a PWA. Pure functions, no DOM mutation. Each is documented by
-// the signal it relies on; prefer definitive signals (the beforeinstallprompt
-// event, lived in install.ts) over UA sniffing wherever possible.
+// PWA install detection. Pure functions, no DOM. Prefer definitive signals (the
+// beforeinstallprompt event in install.ts) over UA sniffing where possible.
 
 const ua = navigator.userAgent;
 
@@ -14,10 +12,8 @@ export function isStandalone(): boolean {
 }
 
 /**
- * Inside an embedded webview / iframe — e.g. an in-app browser
- * where PWA install is impossible and `beforeinstallprompt`
- * never fires. Three independent signals so it holds regardless of frame
- * structure: nested frame, ancestor origins, or an Electron user agent.
+ * Inside an embedded webview / iframe (in-app browser) where install is impossible.
+ * Three signals: nested frame, ancestor origins, or an Electron UA.
  */
 export function isEmbedded(): boolean {
 	try {
@@ -36,17 +32,14 @@ export function isIos(): boolean {
 }
 
 /**
- * Real Safari on iOS — the one browser there that can "Add to Home Screen".
- * Excludes the WebKit-wrapped third-party browsers (Chrome=CriOS, Firefox=FxiOS,
- * Edge=EdgiOS, Opera=OPiOS, …) which all report an Apple vendor but can't
- * reliably install.
+ * Real Safari on iOS - the only browser there that can "Add to Home Screen".
+ * Excludes WKWebView wrappers (CriOS/FxiOS/EdgiOS/…) that can't reliably install.
  */
 export function isIosSafari(): boolean {
 	return (
 		isIos() &&
-		// `navigator.standalone` exists (as a boolean) only in real Mobile Safari;
-		// it's absent in WKWebView in-app browsers (Line, etc.) that otherwise leak
-		// a "Safari" token. This is the reliable discriminator.
+		// `navigator.standalone` exists only in real Mobile Safari, not WKWebView in-app
+		// browsers that leak a "Safari" token - the reliable discriminator.
 		"standalone" in navigator &&
 		/safari/i.test(ua) &&
 		!/crios|fxios|edgios|opios|mercury/i.test(ua)

@@ -1,4 +1,4 @@
-# Build artifacts and deps — regenerated inside the image
+# Build artifacts and deps - regenerated inside the image
 node_modules
 dist
 
@@ -11,3 +11,12 @@ public/tiles
 .gitignore
 .gitattributes
 *.log
+
+# Private analytics override is mounted at runtime, never baked into the image.
+analytics.json
+public/analytics.json
+analytics.example.json
+
+# CI / deploy files that don't belong in the image.
+.github
+compose*.yml

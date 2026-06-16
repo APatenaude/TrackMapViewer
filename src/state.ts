@@ -11,7 +11,7 @@ export function defaultState(cfg: AppConfig): PersistedState {
 	for (const l of cfg.layers) {
 		layers[l.id] = { visible: l.defaultOn, opacity: l.defaultOpacity };
 	}
-	return { view: null, layers, lang: detectBrowserLang(), minimap: true };
+	return { view: null, layers, lang: detectBrowserLang(), minimap: true, drawingEnabled: true, rotationEnabled: true };
 }
 
 export function loadState(cfg: AppConfig): PersistedState {
@@ -28,10 +28,13 @@ export function loadState(cfg: AppConfig): PersistedState {
 			}
 		}
 		return {
-			view: stored.view ?? null,
+			// View is never restored from storage - a reload always resets it.
+			view: null,
 			layers,
 			lang: (stored.lang as Lang) ?? def.lang,
 			minimap: stored.minimap ?? def.minimap,
+			drawingEnabled: stored.drawingEnabled ?? def.drawingEnabled,
+			rotationEnabled: stored.rotationEnabled ?? def.rotationEnabled,
 		};
 	} catch {
 		return def;
@@ -39,14 +42,7 @@ export function loadState(cfg: AppConfig): PersistedState {
 }
 
 export function saveState(state: PersistedState): void {
-	localStorage.setItem(STATE_KEY, JSON.stringify(state));
-}
-
-let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
-export function debouncedSaveState(state: PersistedState): void {
-	if (_debounceTimer !== null) clearTimeout(_debounceTimer);
-	_debounceTimer = setTimeout(() => {
-		_debounceTimer = null;
-		saveState(state);
-	}, 300);
+	// Drop `view` - pan/zoom/rotation must not survive a reload (memory-only, for share links).
+	const { view: _view, ...rest } = state;
+	localStorage.setItem(STATE_KEY, JSON.stringify(rest));
 }

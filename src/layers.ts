@@ -11,6 +11,10 @@ export interface LayersOptions {
 	onOpenChange?: (open: boolean) => void;
 	/** Toggle the minimap (navigator) visibility. */
 	setMinimapVisible: (visible: boolean) => void;
+	/** Enable/disable the draw tool (show/hide its FAB). */
+	setDrawingEnabled: (enabled: boolean) => void;
+	/** Enable/disable rotation (show/hide the compass FAB, lock/straighten). */
+	setRotationEnabled: (enabled: boolean) => void;
 }
 
 export interface LayersResult {
@@ -56,7 +60,7 @@ export function initLayers(
         <button class="lang-btn" data-lang="en">EN</button>
         <button class="lang-btn" data-lang="fr">FR</button>
       </div>
-      <button class="icon-btn install-btn" data-i18n-aria="installApp" hidden>${INSTALL_ICON}</button>
+      <button class="share-btn install-btn" data-i18n-aria="installApp" hidden>${INSTALL_ICON}<span data-i18n="install"></span></button>
       <button class="share-btn panel-share">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
           <path d="M3 11h8V3H3v8zm2-6h4v4H5V5z"/>
@@ -68,10 +72,18 @@ export function initLayers(
       </button>
     </div>
     <div class="panel-body">
-      <div class="layer-row minimap-row">
+      <div class="toggle-grid">
         <label class="toggle-label">
           <input type="checkbox" class="minimap-toggle" />
           <span class="layer-name" data-i18n="minimap"></span>
+        </label>
+        <label class="toggle-label">
+          <input type="checkbox" class="drawing-toggle" />
+          <span class="layer-name" data-i18n="drawing"></span>
+        </label>
+        <label class="toggle-label">
+          <input type="checkbox" class="rotation-toggle" />
+          <span class="layer-name" data-i18n="rotation"></span>
         </label>
       </div>
       <div class="panel-actions">
@@ -88,7 +100,7 @@ export function initLayers(
 	for (const layer of cfg.layers) {
 		const group = svgEl.querySelector<SVGGElement>(`#${CSS.escape(layer.id)}`);
 		if (!group) {
-			console.warn(`[TrackMap] Layer "${layer.id}" not found in SVG — skipping`);
+			console.warn(`[TrackMap] Layer "${layer.id}" not found in SVG - skipping`);
 			continue;
 		}
 
@@ -106,15 +118,19 @@ export function initLayers(
     `;
 		list.appendChild(li);
 
+		const slider = li.querySelector<HTMLInputElement>(".opacity-slider")!;
+		// A hidden layer has nothing to fade - lock its opacity slider until it's shown.
+		slider.disabled = !s.visible;
+
 		li.querySelector<HTMLInputElement>(".layer-toggle")!.addEventListener("change", (e) => {
 			const visible = (e.target as HTMLInputElement).checked;
 			state.layers[layer.id]!.visible = visible;
+			slider.disabled = !visible;
 			applyLayerState(group, visible, state.layers[layer.id]!.opacity);
 			onStateChange();
 			track("layer_toggle", { layer: layer.id, visible });
 		});
 
-		const slider = li.querySelector<HTMLInputElement>(".opacity-slider")!;
 		slider.addEventListener("input", (e) => {
 			const opacity = Number((e.target as HTMLInputElement).value) / 100;
 			state.layers[layer.id]!.opacity = opacity;
@@ -145,16 +161,17 @@ export function initLayers(
 			applyLayerState(group, visible, state.layers[layer.id]!.opacity);
 			const toggle = panel.querySelector<HTMLInputElement>(`.layer-toggle[data-id="${layer.id}"]`);
 			if (toggle) toggle.checked = visible;
-			if (visible) {
-				const slider = panel.querySelector<HTMLInputElement>(`.opacity-slider[data-id="${layer.id}"]`);
-				if (slider) slider.value = "100";
+			const slider = panel.querySelector<HTMLInputElement>(`.opacity-slider[data-id="${layer.id}"]`);
+			if (slider) {
+				slider.disabled = !visible;
+				if (visible) slider.value = "100"; // "All on" also resets opacity to 100%
 			}
 		}
 		onStateChange();
 		track("all_layers", { visible });
 	}
 
-	// Share — encode the current layer/minimap settings into the link.
+	// Share - encode the current layer/minimap settings into the link.
 	panel.querySelector(".panel-share")!.addEventListener("click", () => {
 		const url = location.origin + location.pathname + encodeShareState(cfg, state);
 		openShareModal(url).catch(console.error);
@@ -166,6 +183,24 @@ export function initLayers(
 	minimapToggle.addEventListener("change", () => {
 		state.minimap = minimapToggle.checked;
 		opts.setMinimapVisible(state.minimap);
+		onStateChange();
+	});
+
+	// Drawing toggle - shows/hides the draw FAB and enables/disables the tool.
+	const drawingToggle = panel.querySelector<HTMLInputElement>(".drawing-toggle")!;
+	drawingToggle.checked = state.drawingEnabled;
+	drawingToggle.addEventListener("change", () => {
+		state.drawingEnabled = drawingToggle.checked;
+		opts.setDrawingEnabled(state.drawingEnabled);
+		onStateChange();
+	});
+
+	// Rotation toggle - shows/hides the compass FAB and enables/disables rotation.
+	const rotationToggle = panel.querySelector<HTMLInputElement>(".rotation-toggle")!;
+	rotationToggle.checked = state.rotationEnabled;
+	rotationToggle.addEventListener("change", () => {
+		state.rotationEnabled = rotationToggle.checked;
+		opts.setRotationEnabled(state.rotationEnabled);
 		onStateChange();
 	});
 
@@ -201,8 +236,7 @@ export function initLayers(
 			clearTimeout(hideTimer);
 			hideTimer = null;
 		}
-		// Take it out of display:none, then force a reflow so the slide-in animates
-		// from the closed state rather than snapping straight to open.
+		// Un-hide, then force a reflow so the slide-in animates from the closed state.
 		panel.style.display = "";
 		void panel.offsetHeight;
 		panel.classList.add("open");
@@ -214,9 +248,8 @@ export function initLayers(
 		panel.classList.remove("open");
 		scrim.classList.remove("visible");
 		opts.onOpenChange?.(false);
-		// After the slide-out, fully remove the sheet from the render tree. While it
-		// lingered at opacity:0 iOS Safari could still sample its white behind the
-		// bottom URL bar and stay tinted; display:none forces a re-sample of the map.
+		// After the slide-out, display:none the sheet - else iOS Safari keeps sampling its
+		// white behind the bottom URL bar and stays tinted.
 		hideTimer = setTimeout(() => {
 			panel.style.display = "none";
 			hideTimer = null;
@@ -228,8 +261,7 @@ export function initLayers(
 		else openPanel();
 	}
 
-	// Close when clicking/tapping outside the drawer (desktop has no scrim). Ignore
-	// the FAB so its toggle tap isn't immediately undone.
+	// Close on outside tap (desktop has no scrim); ignore the FAB so its toggle isn't undone.
 	document.addEventListener("pointerdown", (e) => {
 		if (!panel.classList.contains("open")) return;
 		const t = e.target as HTMLElement;

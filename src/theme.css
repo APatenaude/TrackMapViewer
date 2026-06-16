@@ -1,5 +1,5 @@
 /* Single palette. Light UI chrome (drawer, icons, modals) on a dark backdrop.
- * style.css stays structural — all palette lives here as var(--c-*). */
+ * style.css stays structural - all palette lives here as var(--c-*). */
 :root {
 	/* Backdrops */
 	--c-bg: #000; /* dark page / viewer backdrop behind the map */

@@ -18,6 +18,8 @@ export interface FabResult {
 	/** Register a satellite button (e.g. the draw FAB) that stacks beneath the
 	 *  main FAB and follows its panel offset. */
 	addSatellite: (el: HTMLElement) => void;
+	/** Re-stack the satellites - call after toggling one's visibility (`hidden`). */
+	reposition: () => void;
 }
 
 /**
@@ -33,19 +35,18 @@ export function initFab(onTap: () => void): FabResult {
 	let panelOpen = false;
 	const satellites: HTMLElement[] = [];
 
-	// Place the FAB at the top-right (shifted left of the open desktop drawer),
-	// then stack satellites directly beneath it, centered under the 56px FAB.
+	// Top-right FAB (shifted left of the open desktop drawer); satellites stack beneath it.
 	function position(): void {
 		const desktop = window.matchMedia("(min-width: 768px)").matches;
 		const right = panelOpen && desktop ? PANEL_WIDTH + MARGIN + 8 : MARGIN;
-		// Add the iOS safe-area insets so viewport-fit=cover doesn't tuck the
-		// buttons under the status bar / notch (env() is 0 on desktop).
+		// iOS safe-area insets so viewport-fit=cover doesn't tuck buttons under the notch (0 on desktop).
 		fab.style.top = `calc(env(safe-area-inset-top, 0px) + ${MARGIN}px)`;
 		fab.style.right = `calc(env(safe-area-inset-right, 0px) + ${right}px)`;
 
 		const satRight = right + (FAB_SIZE - MINI_SIZE) / 2;
 		let satTop = MARGIN + FAB_SIZE + STACK_GAP;
 		for (const sat of satellites) {
+			if (sat.hidden) continue; // skip hidden satellites so visible ones stack flush
 			sat.style.top = `calc(env(safe-area-inset-top, 0px) + ${satTop}px)`;
 			sat.style.right = `calc(env(safe-area-inset-right, 0px) + ${satRight}px)`;
 			satTop += MINI_SIZE + STACK_GAP;
@@ -66,12 +67,11 @@ export function initFab(onTap: () => void): FabResult {
 		position();
 	}
 
-	// Recompute on viewport changes: crossing the 768px breakpoint or rotating
-	// while the panel is open changes the drawer offset.
+	// Recompute on resize/rotate - the breakpoint and drawer offset can change.
 	window.addEventListener("resize", position);
 	window.addEventListener("orientationchange", position);
 
 	document.body.appendChild(fab);
 	position();
-	return { el: fab, setPanelOpen, addSatellite };
+	return { el: fab, setPanelOpen, addSatellite, reposition: position };
 }

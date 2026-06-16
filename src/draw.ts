@@ -23,16 +23,20 @@ const r = (n: number): number => Math.round(n * 10) / 10;
 /**
  * Temporary freehand drawing over the map. Toggled by a mini-FAB satellite.
  * Strokes live in an SVG <g> inside the existing overlay, so they pan/zoom with
- * the image. Toggling off clears everything — nothing is persisted.
+ * the image. Toggling off clears everything - nothing is persisted.
  */
+export interface DrawApi {
+	/** Show/hide the draw FAB and enable/disable the tool (Options checkbox). */
+	setEnabled: (on: boolean) => void;
+}
+
 export function initDraw(
 	viewer: OpenSeadragon.Viewer,
 	svgEl: SVGSVGElement,
 	fab: FabResult,
 	closePanel: () => void,
-): void {
-	// Stroke layer: appended after the scaled track groups so scribbles sit on
-	// top, in raw image-pixel coordinates (matches windowToImageCoordinates).
+): DrawApi {
+	// Stroke layer on top of the track groups, in image-pixel coords (matches windowToImageCoordinates).
 	const drawGroup = document.createElementNS(SVG_NS, "g");
 	drawGroup.setAttribute("id", "draw-layer");
 	svgEl.appendChild(drawGroup);
@@ -52,9 +56,7 @@ export function initDraw(
 	}
 
 	function beginStroke(e: PointerEvent): void {
-		// Get the drawer out of the way so it can't cover the map being drawn on,
-		// and so touch/mouse behave identically (mouse swallows the event, so it
-		// wouldn't otherwise reach the panel's outside-close handler).
+		// Close the drawer so it can't cover the canvas (and mouse events never reach its outside-close handler).
 		closePanel();
 		drawingId = e.pointerId;
 		const p = toImage(e);
@@ -98,12 +100,10 @@ export function initDraw(
 	}
 
 	function onDown(e: PointerEvent): void {
-		if (viewer.world.getItemCount() === 0) return; // image not open yet — coords would be wrong
+		if (viewer.world.getItemCount() === 0) return; // image not open yet - coords would be wrong
 		if ((e.target as HTMLElement).closest(".navigator")) return; // minimap stays usable
 		if (e.pointerType === "mouse") {
-			// Mouse has no implicit pointer capture, so capture to the container —
-			// otherwise releasing over the panel or off-window misses pointerup and
-			// the gesture sticks (keeps drawing/panning on the next move).
+			// Mouse needs explicit capture, else a release off-window misses pointerup and the gesture sticks.
 			if (e.button === 1) {
 				// Middle button → pan the map (left button is busy drawing).
 				container.setPointerCapture(e.pointerId);
@@ -124,13 +124,11 @@ export function initDraw(
 		// touch / pen
 		activeTouches.add(e.pointerId);
 		if (activeTouches.size >= 2) {
-			// Second finger: drop the scribble and hand both pointers to OSD so
-			// pinch-zoom / two-finger pan work while in draw mode.
+			// Second finger: drop the scribble, let OSD pinch-zoom/pan.
 			cancelStroke();
 			return;
 		}
-		// First finger: start drawing but DON'T stop propagation — OSD must keep
-		// tracking this pointer in case a second finger joins for a pinch.
+		// First finger: draw, but don't stop propagation - OSD must keep tracking it for a possible pinch.
 		beginStroke(e);
 	}
 
@@ -164,16 +162,14 @@ export function initDraw(
 		if (e.pointerId !== drawingId) return;
 		const wasMouse = e.pointerType === "mouse";
 		endStroke();
-		// Mouse: OSD never saw the down, so swallow the up too. Touch: let it pass
-		// so OSD releases the pointer it was tracking (no stuck-pointer state).
+		// Mouse: swallow the up (OSD never saw the down). Touch: let it pass so OSD releases its pointer.
 		if (wasMouse) {
 			e.stopPropagation();
 			e.preventDefault();
 		}
 	}
 
-	// Suppress the Windows middle-click autoscroll bubble (preventDefault on
-	// pointerdown doesn't stop it; the mousedown default action does).
+	// Suppress the Windows middle-click autoscroll (only the mousedown default action stops it).
 	function onMouseDown(e: MouseEvent): void {
 		if (e.button === 1) e.preventDefault();
 	}
@@ -201,7 +197,7 @@ export function initDraw(
 		btn.classList.toggle("active", on);
 		btn.setAttribute("aria-pressed", String(on));
 		btn.innerHTML = on ? CLEAR_ICON : PEN_ICON;
-		// Swap data-i18n-aria too, so the label stays correct across language changes.
+		// Swap data-i18n-aria too, so the label survives a language change.
 		btn.setAttribute("data-i18n-aria", on ? "clearDrawing" : "drawMode");
 		btn.setAttribute("aria-label", t(on ? "clearDrawing" : "drawMode"));
 		if (on) {
@@ -221,4 +217,12 @@ export function initDraw(
 	btn.addEventListener("click", () => setActive(!active));
 
 	fab.addSatellite(btn);
+
+	return {
+		setEnabled(on: boolean): void {
+			if (!on && active) setActive(false); // exit draw mode + clear strokes
+			btn.hidden = !on;
+			fab.reposition();
+		},
+	};
 }

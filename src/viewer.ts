@@ -1,4 +1,6 @@
 import OpenSeadragon from "openseadragon";
+import { initRotate, setViewportRotation } from "./rotate.js";
+import { initUpright } from "./upright.js";
 import type { AppConfig, PersistedState } from "./types.js";
 
 export interface ViewerResult {
@@ -6,6 +8,8 @@ export interface ViewerResult {
 	svgEl: SVGSVGElement;
 	/** Show/hide the navigator (minimap). */
 	setMinimapVisible: (visible: boolean) => void;
+	/** Enable/disable the rotation gestures (compass long-press lock). */
+	setRotationLocked: (locked: boolean) => void;
 }
 
 export function initViewer(
@@ -13,9 +17,8 @@ export function initViewer(
 	cfg: AppConfig,
 	svgDoc: Document,
 	state: PersistedState,
-	onViewChange: (x: number, y: number, zoom: number) => void,
+	onViewChange: (x: number, y: number, zoom: number, rotation: number) => void,
 ): ViewerResult {
-	// Build the SVG overlay element
 	const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
 	svgEl.setAttribute("viewBox", `0 0 ${cfg.imageWidth} ${cfg.imageHeight}`);
 	svgEl.setAttribute("preserveAspectRatio", "xMinYMin meet");
@@ -23,19 +26,16 @@ export function initViewer(
 	svgEl.style.height = "100%";
 	svgEl.style.pointerEvents = "none";
 
-	// Preserve <defs> and <style> from the source SVG (e.g. class-based fill-rule
-	// like `.st0`). Only adopted nodes render, so these must come along too.
+	// Carry over <defs>/<style> too (e.g. .st0 fill rules) - only adopted nodes render.
 	for (const node of Array.from(svgDoc.querySelectorAll("svg > defs, svg > style"))) {
 		svgEl.appendChild(document.adoptNode(node));
 	}
 
-	// The source SVG may use its own coordinate units; scale it into image-pixel
-	// space via the configurable svgScale (image px per SVG user unit).
+	// Scale the source SVG into image-pixel space (svgScale = image px per SVG unit).
 	const scale = cfg.svgScale ?? 1;
 	const scaleGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
 	if (scale !== 1) scaleGroup.setAttribute("transform", `scale(${scale})`);
 
-	// Adopt all <g> elements from the parsed SVG document into the overlay
 	const sourceGroups = Array.from(svgDoc.querySelectorAll("svg > g"));
 	for (const g of sourceGroups) {
 		g.classList.add("layer-group");
@@ -50,15 +50,13 @@ export function initViewer(
 		navigatorPosition: "TOP_LEFT",
 		navigatorAutoFade: false,
 		navigatorSizeRatio: 0.1, // initial size; sizeNavigator() takes over responsively
-		// Allow zooming in well past native pixels (default ~1.1 capped desktop too low)
-		maxZoomPixelRatio: 2.5,
+		maxZoomPixelRatio: 2.5, // zoom past native pixels (OSD's ~1.1 default is too low on desktop)
 		animationTime: 0.4,
 		springStiffness: 7,
 		gestureSettingsTouch: {
 			pinchToZoom: true,
 			flickEnabled: true,
-			// Tame the post-release glide: require a faster flick to trigger
-			// momentum (default 120) and carry far less of it (default 0.25).
+			// Tame the post-release glide: harder to trigger (default 120), carries less (default 0.25).
 			flickMinSpeed: 300,
 			flickMomentum: 0.1,
 			dblClickToZoom: false,
@@ -69,8 +67,7 @@ export function initViewer(
 			clickToZoom: false,
 			dblClickToZoom: false,
 		} as OpenSeadragon.GestureSettings,
-		// Allow panning the image partly off-screen (so a corner can be centered)
-		// instead of snapping back to fill the viewport.
+		// Let the image pan partly off-screen (to center a corner) instead of snapping back.
 		visibilityRatio: 0.5,
 		constrainDuringPan: false,
 		minZoomImageRatio: 0.5,
@@ -80,30 +77,37 @@ export function initViewer(
 		showFullPageControl: false,
 	});
 
+	const setRotation = (degrees: number, immediately = true): void => {
+		setViewportRotation(viewer.viewport, degrees, immediately);
+	};
+
 	viewer.addHandler("open", () => {
-		// Place SVG overlay to cover the entire image in viewport coordinates
+		// Overlay covers the whole image, in viewport coords.
 		const rect = viewer.viewport.imageToViewportRectangle(
 			new OpenSeadragon.Rect(0, 0, cfg.imageWidth, cfg.imageHeight),
 		);
-		// OSD types want an HTMLElement, but it accepts any Element at runtime.
-		viewer.addOverlay({ element: svgEl as unknown as HTMLElement, location: rect });
+		// EXACT mode rotates the overlay (+ draw strokes) with the map.
+		// (Cast: OSD's type wants HTMLElement but accepts any Element.)
+		viewer.addOverlay({
+			element: svgEl as unknown as HTMLElement,
+			location: rect,
+			rotationMode: OpenSeadragon.OverlayRotationMode.EXACT,
+		});
 
-		// Restore saved view or go home
+		// Restore a shared view (incl. rotation), else fit home. localStorage never restores the view.
 		if (state.view) {
 			viewer.viewport.panTo(new OpenSeadragon.Point(state.view.x, state.view.y), true);
 			viewer.viewport.zoomTo(state.view.zoom, undefined, true);
+			setRotation(state.view.rotation ?? 0, true);
 		} else {
 			viewer.viewport.goHome(true);
 		}
 
-		// Reset view on minimap double-click / double-tap. OSD's navigator captures
-		// the pointer (a second MouseTracker or DOM dblclick on it never fires), so
-		// detect the double-tap ourselves in the capture phase.
+		// Detect the minimap double-tap ourselves (capture phase) - OSD's navigator eats dblclick.
 		const navEl = getNav()?.element ?? null;
 		if (navEl) {
 			let lastTap = 0;
-			// Swallow events so the reset tap doesn't also pan. Single taps pass through,
-			// so the navigator's normal click-to-move still works.
+			// Swallow the reset tap so it doesn't also pan; single taps pass through.
 			const swallow = (ev: Event): void => {
 				ev.stopPropagation();
 				ev.preventDefault();
@@ -113,8 +117,7 @@ export function initViewer(
 				(e: PointerEvent) => {
 					const now = performance.now();
 					if (now - lastTap < 400) {
-						// Second tap → reset only. Block this tap's full gesture (OSD pans on
-						// pointerup/click too), then stop blocking so the next tap navigates.
+						// Second tap = reset. Block this gesture (OSD also pans on up/click), release for the next.
 						lastTap = 0;
 						swallow(e);
 						navEl.addEventListener("pointerup", swallow, true);
@@ -123,6 +126,8 @@ export function initViewer(
 							navEl.removeEventListener("pointerup", swallow, true);
 							navEl.removeEventListener("click", swallow, true);
 						}, 500);
+						// Straighten before goHome - goHome fits at the current rotation.
+						setRotation(0, true);
 						viewer.viewport.goHome();
 					} else {
 						lastTap = now;
@@ -132,18 +137,25 @@ export function initViewer(
 			);
 		}
 
-		// Size the minimap responsively, then apply persisted visibility.
 		sizeNavigator();
 		setMinimapVisible(state.minimap);
+
+		// Billboard upright: true layers (e.g. corner numbers) to stay screen-upright when rotated.
+		initUpright(viewer, svgEl, cfg);
 	});
 
 	viewer.addHandler("animation-finish", () => {
 		const center = viewer.viewport.getCenter();
-		onViewChange(center.x, center.y, viewer.viewport.getZoom());
+		onViewChange(center.x, center.y, viewer.viewport.getZoom(), viewer.viewport.getRotation());
 	});
 
-	// OSD's navigator element has class `navigator` (NOT `openseadragon-navigator`),
-	// so reach it via the API rather than a class query.
+	// Free-angle rotation (two-finger twist / right-drag); report the settled angle for share links.
+	const rotate = initRotate(viewer, (rotation) => {
+		const center = viewer.viewport.getCenter();
+		onViewChange(center.x, center.y, viewer.viewport.getZoom(), rotation);
+	});
+
+	// OSD's navigator has class "navigator"; reach it via the API, not a class query.
 	interface Nav {
 		element: HTMLElement;
 		updateSize?: () => void;
@@ -156,9 +168,7 @@ export function initViewer(
 		return (viewer as unknown as { navigator?: Nav }).navigator;
 	}
 
-	// Size the navigator to a fraction of the smaller viewport edge (vmin), keeping
-	// the image aspect — so it rescales on resize and landscape↔portrait. CSS can't
-	// do this alone because OSD sizes the navigator's canvas in JS via updateSize().
+	// Size the navigator in JS (OSD drives its canvas via updateSize) to a vmin fraction, keeping aspect.
 	function sizeNavigator(): void {
 		const nav = getNav();
 		if (!nav?.element) return;
@@ -172,7 +182,7 @@ export function initViewer(
 		nav.updateSize?.();
 	}
 
-	// Toggle the navigator via its Control's setVisible (hides the wrapper cleanly).
+	// Hide via the Control's setVisible (cleaner than display:none on the element).
 	function setMinimapVisible(visible: boolean): void {
 		const navEl = getNav()?.element;
 		if (!navEl) return;
@@ -188,5 +198,5 @@ export function initViewer(
 	window.addEventListener("resize", onResize);
 	window.addEventListener("orientationchange", onResize);
 
-	return { viewer, svgEl, setMinimapVisible };
+	return { viewer, svgEl, setMinimapVisible, setRotationLocked: rotate.setLocked };
 }

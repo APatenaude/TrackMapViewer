@@ -8,6 +8,8 @@ export interface LayerConfig {
 	label: LocalizedString;
 	defaultOn: boolean;
 	defaultOpacity: number;
+	/** Keep this layer's markers screen-upright under rotation (billboarding; one <g> per marker). */
+	upright?: boolean;
 }
 
 export interface AnalyticsConfig {
@@ -28,6 +30,8 @@ export interface AppConfig {
 	title: LocalizedString;
 	/** Track name appended to the tab title, e.g. "Track Map - Tremblant". */
 	trackName?: string;
+	/** Bearing of true north in the image (deg clockwise from image-up). Aims the compass needle only. */
+	northOffset?: number;
 	layers: LayerConfig[];
 	analytics?: AnalyticsConfig;
 }
@@ -38,8 +42,13 @@ export interface LayerState {
 }
 
 export interface PersistedState {
-	view: { x: number; y: number; zoom: number } | null;
+	/** Pan/zoom/rotation. In-memory only (feeds share links), never persisted - see state.ts. */
+	view: { x: number; y: number; zoom: number; rotation: number } | null;
 	layers: Record<string, LayerState>;
 	lang: Lang;
 	minimap: boolean;
+	/** Whether the draw tool / its FAB is available (Options checkbox). */
+	drawingEnabled: boolean;
+	/** Whether map rotation / the compass FAB is available (Options checkbox). */
+	rotationEnabled: boolean;
 }

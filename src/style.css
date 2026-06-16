@@ -29,7 +29,7 @@ body {
 	background: #000; /* map backdrop stays black */
 }
 
-/* ── SVG layer groups – opacity cross-fade ────────────────────────────────── */
+/* ── SVG layer groups - opacity cross-fade ────────────────────────────────── */
 .layer-group {
 	transition: opacity 200ms ease;
 }
@@ -43,7 +43,7 @@ body {
 	border-radius: 6px !important;
 	overflow: hidden !important;
 	cursor: pointer !important;
-	/* viewport-fit=cover sends content under the status bar — nudge the top-left
+	/* viewport-fit=cover sends content under the status bar - nudge the top-left
 	 * minimap clear of the iOS clock/notch. env() is 0 elsewhere. */
 	margin-top: env(safe-area-inset-top, 0px) !important;
 	margin-left: env(safe-area-inset-left, 0px) !important;
@@ -89,7 +89,9 @@ body {
 	color: var(--c-text);
 	border: 1px solid var(--c-border);
 	cursor: pointer;
-	z-index: 199;
+	/* Below the scrim (90) and panel (100) so the open drawer covers the sub-FABs;
+	 * the main FAB (200) stays on top to close it. */
+	z-index: 80;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -108,6 +110,11 @@ body {
 .fab-mini:active {
 	transform: scale(0.92);
 }
+/* .fab-mini sets display:flex, which would override the [hidden] default - restore it
+ * so a disabled tool's FAB (Options checkbox off) actually hides. */
+.fab-mini[hidden] {
+	display: none;
+}
 .fab-mini.active {
 	background: var(--c-pen);
 	color: #fff;
@@ -115,6 +122,84 @@ body {
 	box-shadow:
 		0 0 0 3px color-mix(in srgb, var(--c-pen) 35%, transparent),
 		var(--shadow-fab);
+}
+
+/* Compass FAB: a static black bezel ring + a bigger centred needle, plus an "N"
+ * in a white bubble that rides the rim (set in compass.ts); lock = accent ring. */
+.compass-bezel {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 36px;
+	height: 36px;
+	margin: -18px 0 0 -18px;
+	border: 3px solid currentColor;
+	border-radius: 50%;
+	pointer-events: none;
+}
+.compass-rotor {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transform-origin: 50% 50%;
+	pointer-events: none;
+}
+.compass-glyph {
+	display: block;
+}
+.compass-n {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 17px;
+	height: 17px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #fff;
+	color: #000;
+	border-radius: 50%;
+	font-weight: 700;
+	font-size: 10px;
+	line-height: 1;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+	pointer-events: none;
+}
+.compass-lock {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	display: none;
+}
+/* Locked: hide the needle and show the padlock instead; the N bubble stays. The
+ * whole FAB greys out (disabled look) so the state is readable after you lift. */
+.compass-fab.locked .compass-rotor {
+	display: none;
+}
+.compass-fab.locked .compass-lock {
+	display: block;
+}
+.compass-fab.locked {
+	opacity: 0.55;
+}
+/* Grey ripple pulse on each lock/unlock toggle (visible around the fingertip). */
+@keyframes compass-pulse {
+	from {
+		box-shadow:
+			0 0 0 0 rgba(110, 114, 120, 0.65),
+			var(--shadow-fab);
+	}
+	to {
+		box-shadow:
+			0 0 0 16px rgba(110, 114, 120, 0),
+			var(--shadow-fab);
+	}
+}
+.compass-fab.pulsing {
+	animation: compass-pulse 420ms ease-out;
 }
 
 /* ── Draw strokes (SVG overlay) ───────────────────────────────────────────── */
@@ -145,22 +230,22 @@ body {
 	display: block;
 }
 
-/* ── Panel – mobile floating sheet ───────────────────────────────────────── */
+/* ── Panel - mobile floating sheet ───────────────────────────────────────── */
 /* Floats with a margin all around so the black map backdrop stays behind the
  * bottom edge. iOS Safari tints its translucent bottom URL bar from whatever
- * web content sits behind it — keeping black there stops it flashing white when
+ * web content sits behind it - keeping black there stops it flashing white when
  * the (light) drawer opens. */
 .panel {
 	/* Black backdrop kept behind iOS Safari's bottom URL bar (see comment above).
 	 * The page doesn't scroll, so Safari keeps that bar in its tall expanded state,
-	 * sampling ~the bottom 90px — the sheet's bottom edge must clear that strip
+	 * sampling ~the bottom 90px - the sheet's bottom edge must clear that strip
 	 * (this value + the home-indicator safe-area inset). Raise it if it still bleeds. */
 	--panel-bottom-gap: 12px;
 	position: fixed;
 	bottom: calc(var(--panel-bottom-gap) + env(safe-area-inset-bottom, 0px));
 	left: 12px;
 	right: 12px;
-	max-height: 72vh;
+	max-height: 80vh;
 	overflow-y: auto;
 	background: var(--c-surface);
 	border-radius: 16px;
@@ -179,7 +264,7 @@ body {
 	opacity: 1;
 }
 
-/* ── Panel – desktop side panel ──────────────────────────────────────────── */
+/* ── Panel - desktop side panel ──────────────────────────────────────────── */
 @media (min-width: 768px) {
 	.panel-scrim.visible {
 		display: none;
@@ -222,7 +307,7 @@ body {
 	margin-right: auto;
 }
 
-/* Share button — QR icon + label styled as a single button */
+/* Share button - QR icon + label styled as a single button */
 .share-btn {
 	display: inline-flex;
 	align-items: center;
@@ -240,25 +325,10 @@ body {
 	background: var(--c-surface-3);
 }
 
-/* Square icon-only header buttons (PWA install) */
-.icon-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 32px;
-	height: 32px;
-	padding: 6px;
-	background: var(--c-surface-2);
-	color: var(--c-text);
-	border: 1px solid var(--c-border);
-	border-radius: 8px;
-	cursor: pointer;
-	transition: background 120ms;
-}
-.icon-btn:hover {
-	background: var(--c-surface-3);
-}
-.icon-btn[hidden] {
+/* The install button is styled like Share (.share-btn) with an "Install" label.
+ * Hide it until install is possible - .share-btn's display:inline-flex would
+ * otherwise beat the [hidden] default. */
+.install-btn[hidden] {
 	display: none;
 }
 
@@ -349,7 +419,9 @@ body {
 }
 
 .layer-toggle,
-.minimap-toggle {
+.minimap-toggle,
+.drawing-toggle,
+.rotation-toggle {
 	width: 18px;
 	height: 18px;
 	flex-shrink: 0;
@@ -367,12 +439,26 @@ body {
 	accent-color: var(--c-accent);
 	cursor: pointer;
 }
+/* A hidden layer's slider is locked - grey it out and drop the accent. */
+.opacity-slider:disabled {
+	accent-color: var(--c-divider);
+	cursor: default;
+	opacity: 0.9;
+}
 
-/* Minimap toggle row sits above the layers, separated by a divider */
-.minimap-row {
+/* Minimap / Drawing / Rotation toggles - three columns above the layers. */
+.toggle-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
 	padding-bottom: 14px;
 	margin-bottom: 14px;
 	border-bottom: 1px solid var(--c-divider);
+}
+.toggle-grid .toggle-label {
+	flex-direction: column;
+	gap: 6px;
+	text-align: center;
 }
 
 /* ── Share modal ──────────────────────────────────────────────────────────── */

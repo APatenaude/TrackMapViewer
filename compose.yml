@@ -1,4 +1,4 @@
-# Track Map — run anywhere with Docker. Pulls the prebuilt image and serves on :8080.
+# Track Map - run anywhere with Docker. Pulls the prebuilt image and serves on :8080.
 # No build, no config, no accounts needed.
 #
 #   docker compose up -d        # then open http://localhost:8080
@@ -12,4 +12,4 @@ services:
     container_name: track-map
     restart: unless-stopped
     ports:
-      - "8080:80" # host:container — change the left number to use a different host port
+      - "8080:80" # host:container - change the left number to use a different host port

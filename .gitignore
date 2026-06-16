@@ -2,7 +2,11 @@ node_modules/
 dist/
 public/tiles/
 
-# Private deployment files — never commit
+# Private deployment files - never commit
 .env
 .env.*
 compose.traefik.yml
+# Owner's real Umami details - mounted into the container at deploy, never committed.
+# (analytics.example.json is the committed template.)
+analytics.json
+public/analytics.json

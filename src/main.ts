@@ -1,22 +1,27 @@
-import { initAnalytics } from "./analytics.js";
-import { initDraw } from "./draw.js";
+import { initAnalytics, loadAnalyticsOverride } from "./analytics.js";
+import { type CompassApi, initCompass } from "./compass.js";
+import { type DrawApi, initDraw } from "./draw.js";
 import { initFab } from "./fab.js";
 import { initI18n, pick, registerI18n, translateTree } from "./i18n.js";
 import { initInstall, setupInstallCapture } from "./install.js";
 import { applyAllLayerStates, initLayers } from "./layers.js";
 import { initShare } from "./share.js";
 import { decodeShareState } from "./shareState.js";
-import { debouncedSaveState, loadState, saveState } from "./state.js";
+import { loadState, saveState } from "./state.js";
 import "./style.css";
 import "./theme.css";
 import type { AppConfig } from "./types.js";
 import { initViewer } from "./viewer.js";
 
 async function init(): Promise<void> {
-	// Capture the PWA install prompt first — it can fire before config resolves.
+	// Capture the PWA install prompt first - it can fire before config resolves.
 	setupInstallCapture();
 
 	const cfg: AppConfig = await fetch("/config.json").then((r) => r.json());
+
+	// Owner's private Umami details (mounted /analytics.json; absent in the public image). See analytics.ts.
+	const analyticsOverride = await loadAnalyticsOverride();
+	if (analyticsOverride) cfg.analytics = analyticsOverride;
 
 	initAnalytics(cfg);
 
@@ -26,41 +31,59 @@ async function init(): Promise<void> {
 	const state = loadState(cfg);
 	initI18n(state.lang);
 
-	// A shared link (?s=…) overrides layer/minimap settings, then is stripped from
-	// the URL so later local changes aren't re-clobbered on reload.
+	// A shared link (?s=…) overrides settings + (v2) the view, then is stripped from the URL.
 	const shared = decodeShareState(location.search);
 	if (shared) {
 		for (const [id, s] of Object.entries(shared.layers)) {
 			if (state.layers[id]) state.layers[id] = { visible: s.visible, opacity: s.opacity };
 		}
 		if (shared.minimap !== undefined) state.minimap = shared.minimap;
+		if (shared.drawing !== undefined) state.drawingEnabled = shared.drawing;
+		if (shared.rotation !== undefined) state.rotationEnabled = shared.rotation;
+		// The viewer restores state.view on "open"; the view itself never persists.
+		if (shared.view) state.view = shared.view;
 		saveState(state);
 		history.replaceState(null, "", location.origin + location.pathname);
 	}
 
 	const container = document.getElementById("viewer")!;
-	const { viewer, svgEl, setMinimapVisible } = initViewer(container, cfg, svgDoc, state, (x, y, zoom) => {
-		state.view = { x, y, zoom };
-		debouncedSaveState(state);
-	});
+	// View lives in memory only (feeds share links, never saved) - see state.ts saveState.
+	const { viewer, svgEl, setMinimapVisible, setRotationLocked } = initViewer(
+		container,
+		cfg,
+		svgDoc,
+		state,
+		(x, y, zoom, rotation) => {
+			state.view = { x, y, zoom, rotation };
+		},
+	);
 
 	// Apply initial layer visibility before OSD fires "open"
 	applyAllLayerStates(cfg, svgEl, state);
 
-	// FAB toggles the panel; the panel moves the FAB out of its own way when open.
+	// draw/compass are created after the panel, so the Options checkboxes reach them via these mutable handles.
 	let togglePanel = (): void => {};
+	let drawApi: DrawApi = { setEnabled: () => {} };
+	let compassApi: CompassApi = { setEnabled: () => {} };
 	const fab = initFab(() => togglePanel());
 	const layers = initLayers(cfg, svgEl, state, () => saveState(state), {
 		onOpenChange: (open) => fab.setPanelOpen(open),
 		setMinimapVisible,
+		setDrawingEnabled: (on) => drawApi.setEnabled(on),
+		setRotationEnabled: (on) => compassApi.setEnabled(on),
 	});
 	togglePanel = layers.togglePanel;
 
 	initShare();
 
-	// Draw-mode toggle (mini-FAB satellite) + PWA install button (drawer header).
-	initDraw(viewer, svgEl, fab, layers.closePanel);
+	// Draw-mode toggle + compass (mini-FAB satellites) + PWA install button (drawer header).
+	drawApi = initDraw(viewer, svgEl, fab, layers.closePanel);
+	compassApi = initCompass(viewer, fab, { northOffset: cfg.northOffset ?? 0, setRotationLocked });
 	initInstall(document.querySelector<HTMLButtonElement>(".install-btn")!);
+
+	// Apply persisted tool toggles (hides a FAB if its tool is switched off).
+	drawApi.setEnabled(state.drawingEnabled);
+	compassApi.setEnabled(state.rotationEnabled);
 
 	// Apply UI text now and on every language change (covers panel, modal, FAB, title).
 	registerI18n(() => {
