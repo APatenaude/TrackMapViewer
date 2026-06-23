@@ -3,6 +3,26 @@ export type Lang = "en" | "fr";
 /** A string that may be plain (single language) or localized per Lang. */
 export type LocalizedString = string | Partial<Record<Lang, string>>;
 
+/** Platform/browser the install instructions are tailored to (see platform.ts detectInstallScenario). */
+export type InstallScenario =
+	| "ios-safari"
+	| "ios-other"
+	| "android-chromium"
+	| "android-samsung"
+	| "android-firefox"
+	| "desktop-chromium"
+	| "macos-safari"
+	| "desktop-firefox"
+	| "fallback";
+
+/** One platform's install walkthrough. Steps may embed {share}/{add}/{install}/{menu} glyph placeholders. */
+export interface InstallGuide {
+	title: string;
+	sub: string;
+	steps: string[];
+	note?: string;
+}
+
 export interface LayerConfig {
 	id: string;
 	label: LocalizedString;
@@ -19,7 +39,7 @@ export interface AnalyticsConfig {
 
 export interface AppConfig {
 	imageWidth: number;
-	imageHeight: number;
+	imageHeight: number; // What the install button should do now; recomputed on demand for late-firing prompts.
 	/** Image pixels per SVG user unit. Maps the SVG coordinate space onto the
 	 *  background pixel space. Defaults to 1 when omitted. */
 	svgScale?: number;
