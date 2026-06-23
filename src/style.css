@@ -231,32 +231,35 @@ body {
 }
 
 /* ── Panel - mobile floating sheet ───────────────────────────────────────── */
-/* Floats with a margin all around so the black map backdrop stays behind the
- * bottom edge. iOS Safari tints its translucent bottom URL bar from whatever
- * web content sits behind it - keeping black there stops it flashing white when
- * the (light) drawer opens. */
+/* Floats with a 12px margin all around. Contexts that need to clear an OS bottom
+ * strip add the safe-area inset on top via body.safe-area-bottom (see below). */
 .panel {
-	/* Black backdrop kept behind iOS Safari's bottom URL bar (see comment above).
-	 * The page doesn't scroll, so Safari keeps that bar in its tall expanded state,
-	 * sampling ~the bottom 90px - the sheet's bottom edge must clear that strip
-	 * (this value + the home-indicator safe-area inset). Raise it if it still bleeds. */
-	--panel-bottom-gap: 12px;
+	--panel-bottom: 12px; /* gap from screen bottom; matches the 12px side margins */
 	position: fixed;
-	bottom: calc(var(--panel-bottom-gap) + env(safe-area-inset-bottom, 0px));
+	bottom: var(--panel-bottom);
 	left: 12px;
 	right: 12px;
-	max-height: 80vh;
+	/* Cap height so the top edge always clears the top-right FAB. dvh tracks the
+	 * visible viewport, so iOS Chrome's toolbars don't inflate it like vh does.
+	 * Top reserve = safe-area-top + 16 (FAB margin) + 56 (FAB) + 12 (gap) = 84px. */
+	max-height: calc(100dvh - var(--panel-bottom) - env(safe-area-inset-top, 0px) - 84px);
 	overflow-y: auto;
 	background: var(--c-surface);
 	border-radius: 16px;
 	box-shadow: var(--shadow-modal);
 	z-index: 100;
-	transform: translateY(calc(100% + var(--panel-bottom-gap) + env(safe-area-inset-bottom, 0px)));
+	transform: translateY(calc(100% + var(--panel-bottom)));
 	opacity: 0;
 	transition:
 		transform 300ms ease,
 		opacity 300ms ease;
 	overscroll-behavior: contain;
+}
+
+/* Contexts with a real OS bottom strip (iOS Safari URL bar / home indicator, Android
+ * gesture bar) lift the sheet above it. See usesBottomSafeArea() for who gets this. */
+body.safe-area-bottom .panel {
+	--panel-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
 .panel.open {
@@ -275,7 +278,7 @@ body {
 		bottom: 0;
 		left: auto;
 		right: 0;
-		width: 288px;
+		width: 312px;
 		max-height: 100vh;
 		border-radius: 0;
 		transform: translateX(100%);
@@ -291,8 +294,9 @@ body {
 .panel-header {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 16px 20px 12px;
+	flex-wrap: wrap;
+	gap: 8px 6px;
+	padding: 12px 14px 10px;
 	border-bottom: 1px solid var(--c-divider);
 	position: sticky;
 	top: 0;
@@ -300,24 +304,34 @@ body {
 	z-index: 1;
 }
 
-/* Language toggle sits at the left of the header, pushing the icon/share
- * buttons to the right edge. */
+/* Language toggle sits at the left of the header, pushing the install/share
+ * group to the right edge. When the row is too narrow (e.g. longer French
+ * labels), the group wraps to its own line and stays right-aligned. */
 .panel-header .lang-toggle {
 	margin: 0;
 	margin-right: auto;
+	flex-shrink: 0;
+}
+
+.panel-header-actions {
+	display: flex;
+	gap: 6px;
+	flex-shrink: 0;
+	margin-left: auto;
 }
 
 /* Share button - QR icon + label styled as a single button */
 .share-btn {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: 5px;
 	background: var(--c-surface-2);
 	color: var(--c-text);
 	border: 1px solid var(--c-border);
 	border-radius: 8px;
-	padding: 6px 12px;
+	padding: 6px 9px;
 	font-size: 13px;
+	white-space: nowrap;
 	cursor: pointer;
 	transition: background 120ms;
 }
@@ -535,7 +549,7 @@ body {
 /* ── Install instructions modal ───────────────────────────────────────────── */
 .install-card {
 	align-items: stretch;
-	gap: 14px;
+	gap: 12px;
 	padding: 20px 24px;
 }
 
@@ -544,33 +558,69 @@ body {
 	font-size: 18px;
 	font-weight: 600;
 	color: var(--c-text-bright);
-	text-align: center;
+}
+
+.install-sub {
+	margin: -6px 0 4px;
+	font-size: 14px;
+	color: var(--c-muted);
 }
 
 .install-steps {
 	margin: 0;
-	padding-left: 20px;
+	padding: 0;
+	list-style: none;
+	counter-reset: install-step;
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 12px;
 	font-size: 14px;
-	line-height: 1.4;
+	line-height: 1.45;
 	color: var(--c-text);
 }
 
-.install-generic {
+.install-steps li {
+	counter-increment: install-step;
+	position: relative;
+	padding: 3px 0 3px 40px;
+	min-height: 28px;
+}
+
+.install-steps li::before {
+	content: counter(install-step);
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: var(--c-accent);
+	color: var(--c-fab-icon);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 13px;
+}
+
+/* Contextual tip below the steps (e.g. macOS version requirement) */
+.install-note {
 	margin: 0;
-	font-size: 14px;
+	padding: 10px 12px;
+	background: var(--c-surface-2);
+	border-radius: 10px;
+	font-size: 13px;
 	line-height: 1.4;
-	color: var(--c-text);
+	color: var(--c-muted);
 }
 
 /* Glyph inlined into instruction text (e.g. the iOS Share icon) */
 .inline-icon {
-	width: 1.1em;
-	height: 1.1em;
-	vertical-align: -0.2em;
-	margin: 0 1px;
+	width: 1.4em;
+	height: 1.4em;
+	vertical-align: -0.32em;
+	margin: 0 2px;
+	color: var(--c-accent);
 }
 
 .install-card .modal-actions {

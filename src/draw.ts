@@ -85,14 +85,14 @@ export function initDraw(
 		for (const path of current.paths) path.setAttribute("d", current.d);
 	}
 
-	/** Keep a finished stroke; drop a tap (a single point with no line). */
+	// Keep a finished stroke; drop a tap (a single point with no line).
 	function endStroke(): void {
 		if (current && current.count < 2) current.group.remove();
 		current = null;
 		drawingId = null;
 	}
 
-	/** Abandon the in-progress stroke (e.g. a second finger joined → let OSD pinch). */
+	// Abandon the in-progress stroke (e.g. a second finger joined - let OSD pinch).
 	function cancelStroke(): void {
 		if (current) current.group.remove();
 		current = null;

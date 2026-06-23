@@ -60,16 +60,18 @@ export function initLayers(
         <button class="lang-btn" data-lang="en">EN</button>
         <button class="lang-btn" data-lang="fr">FR</button>
       </div>
-      <button class="share-btn install-btn" data-i18n-aria="installApp" hidden>${INSTALL_ICON}<span data-i18n="install"></span></button>
-      <button class="share-btn panel-share">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-          <path d="M3 11h8V3H3v8zm2-6h4v4H5V5z"/>
-          <path d="M3 21h8v-8H3v8zm2-6h4v4H5v-4z"/>
-          <path d="M13 3v8h8V3h-8zm6 6h-4V5h4v4z"/>
-          <path d="M13 13h2v2h-2zm2 2h2v2h-2zm-2 2h2v2h-2zm2 2h2v2h-2zm2-2h2v2h-2zm0-4h2v2h-2zm2 2h2v2h-2zm-2 4h2v2h-2z"/>
-        </svg>
-        <span data-i18n="share"></span>
-      </button>
+      <div class="panel-header-actions">
+        <button class="share-btn install-btn" data-i18n-aria="installApp" hidden>${INSTALL_ICON}<span data-i18n="install"></span></button>
+        <button class="share-btn panel-share">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+            <path d="M3 11h8V3H3v8zm2-6h4v4H5V5z"/>
+            <path d="M3 21h8v-8H3v8zm2-6h4v4H5v-4z"/>
+            <path d="M13 3v8h8V3h-8zm6 6h-4V5h4v4z"/>
+            <path d="M13 13h2v2h-2zm2 2h2v2h-2zm-2 2h2v2h-2zm2 2h2v2h-2zm2-2h2v2h-2zm0-4h2v2h-2zm2 2h2v2h-2zm-2 4h2v2h-2z"/>
+          </svg>
+          <span data-i18n="share"></span>
+        </button>
+      </div>
     </div>
     <div class="panel-body">
       <div class="toggle-grid">

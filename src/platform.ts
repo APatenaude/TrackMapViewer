@@ -1,6 +1,8 @@
 // PWA install detection. Pure functions, no DOM. Prefer definitive signals (the
 // beforeinstallprompt event in install.ts) over UA sniffing where possible.
 
+import type { InstallScenario } from "./types.js";
+
 const ua = navigator.userAgent;
 
 /** Already running as an installed PWA (standalone display, or iOS home-screen). */
@@ -44,4 +46,38 @@ export function isIosSafari(): boolean {
 		/safari/i.test(ua) &&
 		!/crios|fxios|edgios|opios|mercury/i.test(ua)
 	);
+}
+
+/**
+ * Whether the drawer's bottom gap should add env(safe-area-inset-bottom) to clear the OS
+ * bottom strip. Opt-in, because the inset is only right in some contexts:
+ *  - iOS Safari in browser mode: yes (translucent URL bar + home indicator).
+ *  - iOS standalone PWA: no - it reports the home-indicator inset but it looks too big.
+ *  - Android (Chrome/Edge/Samsung/...): yes (gesture nav bar), EXCEPT
+ *  - Firefox Android: no - it over-reports, folding its own toolbar into the inset.
+ */
+export function usesBottomSafeArea(): boolean {
+	if (isIos()) return isIosSafari() && !isStandalone();
+	if (/android/i.test(ua)) return !/firefox/i.test(ua);
+	return false;
+}
+
+/**
+ * Pick the install walkthrough that matches this browser. Only consulted when the
+ * native prompt is unavailable (see install.ts) - it never overrides beforeinstallprompt.
+ */
+export function detectInstallScenario(): InstallScenario {
+	if (isIos()) return isIosSafari() ? "ios-safari" : "ios-other";
+
+	if (/android/i.test(ua)) {
+		if (/samsungbrowser/i.test(ua)) return "android-samsung";
+		if (/firefox|fxios/i.test(ua)) return "android-firefox";
+		return "android-chromium"; // Chrome, Edge, Brave, Opera...
+	}
+
+	// Desktop
+	if (/firefox/i.test(ua)) return "desktop-firefox";
+	if (/macintosh/i.test(ua) && /safari/i.test(ua) && !/chrome|chromium|edg/i.test(ua)) return "macos-safari";
+	if (/chrome|chromium|edg|opr/i.test(ua)) return "desktop-chromium";
+	return "fallback";
 }

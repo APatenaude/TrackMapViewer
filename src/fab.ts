@@ -4,7 +4,7 @@ const MINI_SIZE = 44; // keep in sync with .fab-mini in style.css
 const STACK_GAP = 12; // vertical gap between stacked buttons
 
 // Keep in sync with the desktop side-panel width in style.css.
-const PANEL_WIDTH = 288;
+const PANEL_WIDTH = 312;
 
 const ICON_ATTRS =
 	'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"';

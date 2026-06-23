@@ -5,6 +5,7 @@ import { initFab } from "./fab.js";
 import { initI18n, pick, registerI18n, translateTree } from "./i18n.js";
 import { initInstall, setupInstallCapture } from "./install.js";
 import { applyAllLayerStates, initLayers } from "./layers.js";
+import { usesBottomSafeArea } from "./platform.js";
 import { initShare } from "./share.js";
 import { decodeShareState } from "./shareState.js";
 import { loadState, saveState } from "./state.js";
@@ -14,6 +15,10 @@ import type { AppConfig } from "./types.js";
 import { initViewer } from "./viewer.js";
 
 async function init(): Promise<void> {
+	// Only some contexts need the drawer to clear the OS bottom strip (see usesBottomSafeArea
+	// and body.safe-area-bottom in style.css); default is a plain 12px gap.
+	if (usesBottomSafeArea()) document.body.classList.add("safe-area-bottom");
+
 	// Capture the PWA install prompt first - it can fire before config resolves.
 	setupInstallCapture();
 
