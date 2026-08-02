@@ -2,19 +2,13 @@ import { track } from "./analytics.js";
 import { getLang, pick, registerI18n, setLang } from "./i18n.js";
 import { openShareModal } from "./share.js";
 import { encodeShareState } from "./shareState.js";
-import type { AppConfig, Lang, PersistedState } from "./types.js";
+import type { AppConfig, Lang, LayerConfig, PersistedState } from "./types.js";
 
 const INSTALL_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>`;
 
 export interface LayersOptions {
 	/** Called when the panel opens/closes (e.g. to move the FAB out of the way). */
 	onOpenChange?: (open: boolean) => void;
-	/** Toggle the minimap (navigator) visibility. */
-	setMinimapVisible: (visible: boolean) => void;
-	/** Enable/disable the draw tool (show/hide its FAB). */
-	setDrawingEnabled: (enabled: boolean) => void;
-	/** Enable/disable rotation (show/hide the compass FAB, lock/straighten). */
-	setRotationEnabled: (enabled: boolean) => void;
 }
 
 export interface LayersResult {
@@ -23,16 +17,28 @@ export interface LayersResult {
 	togglePanel: () => void;
 }
 
-export function applyLayerState(group: SVGGElement, visible: boolean, opacity: number): void {
-	group.style.opacity = visible ? String(opacity) : "0";
+export function applyLayerState(groups: SVGGElement[], visible: boolean, opacity: number): void {
+	const value = visible ? String(opacity) : "0";
+	for (const group of groups) group.style.opacity = value;
+}
+
+/** The SVG groups a layer controls - one, or several for a merged layer (`ids`). */
+export function layerGroups(svgEl: SVGSVGElement, layer: LayerConfig): SVGGElement[] {
+	const ids = layer.ids ?? [layer.id];
+	const out: SVGGElement[] = [];
+	for (const id of ids) {
+		const group = svgEl.querySelector<SVGGElement>(`#${CSS.escape(id)}`);
+		if (group) out.push(group);
+	}
+	return out;
 }
 
 export function applyAllLayerStates(cfg: AppConfig, svgEl: SVGSVGElement, state: PersistedState): void {
 	for (const layer of cfg.layers) {
-		const group = svgEl.querySelector<SVGGElement>(`#${CSS.escape(layer.id)}`);
-		if (!group) continue;
+		const groups = layerGroups(svgEl, layer);
+		if (groups.length === 0) continue;
 		const s = state.layers[layer.id];
-		if (s) applyLayerState(group, s.visible, s.opacity);
+		if (s) applyLayerState(groups, s.visible, s.opacity);
 	}
 }
 
@@ -74,20 +80,6 @@ export function initLayers(
       </div>
     </div>
     <div class="panel-body">
-      <div class="toggle-grid">
-        <label class="toggle-label">
-          <input type="checkbox" class="minimap-toggle" />
-          <span class="layer-name" data-i18n="minimap"></span>
-        </label>
-        <label class="toggle-label">
-          <input type="checkbox" class="drawing-toggle" />
-          <span class="layer-name" data-i18n="drawing"></span>
-        </label>
-        <label class="toggle-label">
-          <input type="checkbox" class="rotation-toggle" />
-          <span class="layer-name" data-i18n="rotation"></span>
-        </label>
-      </div>
       <div class="panel-actions">
         <button class="btn btn-sm all-on" data-i18n="allOn"></button>
         <button class="btn btn-sm all-off" data-i18n="allOff"></button>
@@ -100,8 +92,8 @@ export function initLayers(
 
 	// Build a row per configured layer
 	for (const layer of cfg.layers) {
-		const group = svgEl.querySelector<SVGGElement>(`#${CSS.escape(layer.id)}`);
-		if (!group) {
+		const groups = layerGroups(svgEl, layer);
+		if (groups.length === 0) {
 			console.warn(`[TrackMap] Layer "${layer.id}" not found in SVG - skipping`);
 			continue;
 		}
@@ -128,7 +120,7 @@ export function initLayers(
 			const visible = (e.target as HTMLInputElement).checked;
 			state.layers[layer.id]!.visible = visible;
 			slider.disabled = !visible;
-			applyLayerState(group, visible, state.layers[layer.id]!.opacity);
+			applyLayerState(groups, visible, state.layers[layer.id]!.opacity);
 			onStateChange();
 			track("layer_toggle", { layer: layer.id, visible });
 		});
@@ -136,7 +128,7 @@ export function initLayers(
 		slider.addEventListener("input", (e) => {
 			const opacity = Number((e.target as HTMLInputElement).value) / 100;
 			state.layers[layer.id]!.opacity = opacity;
-			applyLayerState(group, state.layers[layer.id]!.visible, opacity);
+			applyLayerState(groups, state.layers[layer.id]!.visible, opacity);
 			onStateChange();
 		});
 		// Fire once when the drag settles, not on every intermediate value.
@@ -155,12 +147,12 @@ export function initLayers(
 
 	function setAllVisible(visible: boolean) {
 		for (const layer of cfg.layers) {
-			const group = svgEl.querySelector<SVGGElement>(`#${CSS.escape(layer.id)}`);
-			if (!group || !state.layers[layer.id]) continue;
+			const groups = layerGroups(svgEl, layer);
+			if (groups.length === 0 || !state.layers[layer.id]) continue;
 			state.layers[layer.id]!.visible = visible;
 			// "All on" also resets opacity to 100%.
 			if (visible) state.layers[layer.id]!.opacity = 1;
-			applyLayerState(group, visible, state.layers[layer.id]!.opacity);
+			applyLayerState(groups, visible, state.layers[layer.id]!.opacity);
 			const toggle = panel.querySelector<HTMLInputElement>(`.layer-toggle[data-id="${layer.id}"]`);
 			if (toggle) toggle.checked = visible;
 			const slider = panel.querySelector<HTMLInputElement>(`.opacity-slider[data-id="${layer.id}"]`);
@@ -173,37 +165,10 @@ export function initLayers(
 		track("all_layers", { visible });
 	}
 
-	// Share - encode the current layer/minimap settings into the link.
+	// Share - encode the current layer settings into the link.
 	panel.querySelector(".panel-share")!.addEventListener("click", () => {
 		const url = location.origin + location.pathname + encodeShareState(cfg, state);
 		openShareModal(url).catch(console.error);
-	});
-
-	// Minimap toggle
-	const minimapToggle = panel.querySelector<HTMLInputElement>(".minimap-toggle")!;
-	minimapToggle.checked = state.minimap;
-	minimapToggle.addEventListener("change", () => {
-		state.minimap = minimapToggle.checked;
-		opts.setMinimapVisible(state.minimap);
-		onStateChange();
-	});
-
-	// Drawing toggle - shows/hides the draw FAB and enables/disables the tool.
-	const drawingToggle = panel.querySelector<HTMLInputElement>(".drawing-toggle")!;
-	drawingToggle.checked = state.drawingEnabled;
-	drawingToggle.addEventListener("change", () => {
-		state.drawingEnabled = drawingToggle.checked;
-		opts.setDrawingEnabled(state.drawingEnabled);
-		onStateChange();
-	});
-
-	// Rotation toggle - shows/hides the compass FAB and enables/disables rotation.
-	const rotationToggle = panel.querySelector<HTMLInputElement>(".rotation-toggle")!;
-	rotationToggle.checked = state.rotationEnabled;
-	rotationToggle.addEventListener("change", () => {
-		state.rotationEnabled = rotationToggle.checked;
-		opts.setRotationEnabled(state.rotationEnabled);
-		onStateChange();
 	});
 
 	// Language toggle

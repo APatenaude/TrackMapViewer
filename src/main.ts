@@ -1,11 +1,12 @@
 import { initAnalytics, loadAnalyticsOverride } from "./analytics.js";
-import { type CompassApi, initCompass } from "./compass.js";
-import { type DrawApi, initDraw } from "./draw.js";
+import { initCompass } from "./compass.js";
+import { initDraw } from "./draw.js";
 import { initFab } from "./fab.js";
 import { initI18n, pick, registerI18n, translateTree } from "./i18n.js";
 import { initInstall, setupInstallCapture } from "./install.js";
 import { applyAllLayerStates, initLayers } from "./layers.js";
 import { usesBottomSafeArea } from "./platform.js";
+import { initReplay } from "./replay.js";
 import { initShare } from "./share.js";
 import { decodeShareState } from "./shareState.js";
 import { loadState, saveState } from "./state.js";
@@ -53,7 +54,7 @@ async function init(): Promise<void> {
 
 	const container = document.getElementById("viewer")!;
 	// View lives in memory only (feeds share links, never saved) - see state.ts saveState.
-	const { viewer, svgEl, setMinimapVisible, setRotationLocked } = initViewer(
+	const { viewer, svgEl, setRotationLocked } = initViewer(
 		container,
 		cfg,
 		svgDoc,
@@ -66,29 +67,25 @@ async function init(): Promise<void> {
 	// Apply initial layer visibility before OSD fires "open"
 	applyAllLayerStates(cfg, svgEl, state);
 
-	// draw/compass are created after the panel, so the Options checkboxes reach them via these mutable handles.
 	let togglePanel = (): void => {};
-	let drawApi: DrawApi = { setEnabled: () => {} };
-	let compassApi: CompassApi = { setEnabled: () => {} };
 	const fab = initFab(() => togglePanel());
 	const layers = initLayers(cfg, svgEl, state, () => saveState(state), {
 		onOpenChange: (open) => fab.setPanelOpen(open),
-		setMinimapVisible,
-		setDrawingEnabled: (on) => drawApi.setEnabled(on),
-		setRotationEnabled: (on) => compassApi.setEnabled(on),
 	});
 	togglePanel = layers.togglePanel;
 
 	initShare();
 
-	// Draw-mode toggle + compass (mini-FAB satellites) + PWA install button (drawer header).
-	drawApi = initDraw(viewer, svgEl, fab, layers.closePanel);
-	compassApi = initCompass(viewer, fab, { northOffset: cfg.northOffset ?? 0, setRotationLocked });
+	// Draw / compass / replay tools (mini-FAB satellites) + PWA install button (drawer header).
+	const drawApi = initDraw(viewer, svgEl, fab, layers.closePanel);
+	const compassApi = initCompass(viewer, fab, { northOffset: cfg.northOffset ?? 0, setRotationLocked });
+	const replayApi = initReplay(viewer, svgEl, fab, layers.closePanel, cfg.replay);
 	initInstall(document.querySelector<HTMLButtonElement>(".install-btn")!);
 
-	// Apply persisted tool toggles (hides a FAB if its tool is switched off).
-	drawApi.setEnabled(state.drawingEnabled);
-	compassApi.setEnabled(state.rotationEnabled);
+	// The tools are always available (their toggles were removed).
+	drawApi.setEnabled(true);
+	compassApi.setEnabled(true);
+	replayApi.setEnabled(true);
 
 	// Apply UI text now and on every language change (covers panel, modal, FAB, title).
 	registerI18n(() => {

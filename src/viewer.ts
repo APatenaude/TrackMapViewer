@@ -6,8 +6,6 @@ import type { AppConfig, PersistedState } from "./types.js";
 export interface ViewerResult {
 	viewer: OpenSeadragon.Viewer;
 	svgEl: SVGSVGElement;
-	/** Show/hide the navigator (minimap). */
-	setMinimapVisible: (visible: boolean) => void;
 	/** Enable/disable the rotation gestures (compass long-press lock). */
 	setRotationLocked: (locked: boolean) => void;
 }
@@ -46,10 +44,7 @@ export function initViewer(
 	const viewer = new OpenSeadragon.Viewer({
 		element: container,
 		tileSources: cfg.tileSource ?? "/tiles/track.dzi",
-		showNavigator: true,
-		navigatorPosition: "TOP_LEFT",
-		navigatorAutoFade: false,
-		navigatorSizeRatio: 0.1, // initial size; sizeNavigator() takes over responsively
+		showNavigator: false,
 		maxZoomPixelRatio: 2.5, // zoom past native pixels (OSD's ~1.1 default is too low on desktop)
 		animationTime: 0.4,
 		springStiffness: 7,
@@ -103,43 +98,6 @@ export function initViewer(
 			viewer.viewport.goHome(true);
 		}
 
-		// Detect the minimap double-tap ourselves (capture phase) - OSD's navigator eats dblclick.
-		const navEl = getNav()?.element ?? null;
-		if (navEl) {
-			let lastTap = 0;
-			// Swallow the reset tap so it doesn't also pan; single taps pass through.
-			const swallow = (ev: Event): void => {
-				ev.stopPropagation();
-				ev.preventDefault();
-			};
-			navEl.addEventListener(
-				"pointerdown",
-				(e: PointerEvent) => {
-					const now = performance.now();
-					if (now - lastTap < 400) {
-						// Second tap = reset. Block this gesture (OSD also pans on up/click), release for the next.
-						lastTap = 0;
-						swallow(e);
-						navEl.addEventListener("pointerup", swallow, true);
-						navEl.addEventListener("click", swallow, true);
-						setTimeout(() => {
-							navEl.removeEventListener("pointerup", swallow, true);
-							navEl.removeEventListener("click", swallow, true);
-						}, 500);
-						// Straighten before goHome - goHome fits at the current rotation.
-						setRotation(0, true);
-						viewer.viewport.goHome();
-					} else {
-						lastTap = now;
-					}
-				},
-				true, // capture: run before OSD's own pointer handling
-			);
-		}
-
-		sizeNavigator();
-		setMinimapVisible(state.minimap);
-
 		// Billboard upright: true layers (e.g. corner numbers) to stay screen-upright when rotated.
 		initUpright(viewer, svgEl, cfg);
 	});
@@ -155,48 +113,5 @@ export function initViewer(
 		onViewChange(center.x, center.y, viewer.viewport.getZoom(), rotation);
 	});
 
-	// OSD's navigator has class "navigator"; reach it via the API, not a class query.
-	interface Nav {
-		element: HTMLElement;
-		updateSize?: () => void;
-	}
-	interface Ctrl {
-		element: HTMLElement;
-		setVisible: (v: boolean) => void;
-	}
-	function getNav(): Nav | undefined {
-		return (viewer as unknown as { navigator?: Nav }).navigator;
-	}
-
-	// Size the navigator in JS (OSD drives its canvas via updateSize) to a vmin fraction, keeping aspect.
-	function sizeNavigator(): void {
-		const nav = getNav();
-		if (!nav?.element) return;
-		const vmin = Math.min(window.innerWidth, window.innerHeight);
-		const major = Math.max(110, Math.min(vmin * 0.35, 240)); // longer edge, px
-		const aspect = cfg.imageWidth / cfg.imageHeight;
-		const w = aspect >= 1 ? major : Math.round(major * aspect);
-		const h = aspect >= 1 ? Math.round(major / aspect) : major;
-		nav.element.style.width = `${w}px`;
-		nav.element.style.height = `${h}px`;
-		nav.updateSize?.();
-	}
-
-	// Hide via the Control's setVisible (cleaner than display:none on the element).
-	function setMinimapVisible(visible: boolean): void {
-		const navEl = getNav()?.element;
-		if (!navEl) return;
-		const controls = (viewer as unknown as { controls?: Ctrl[] }).controls ?? [];
-		const ctrl = controls.find((c) => c.element === navEl);
-		if (ctrl) ctrl.setVisible(visible);
-		else if (navEl.parentElement) navEl.parentElement.style.display = visible ? "" : "none";
-	}
-
-	const onResize = (): void => {
-		requestAnimationFrame(sizeNavigator);
-	};
-	window.addEventListener("resize", onResize);
-	window.addEventListener("orientationchange", onResize);
-
-	return { viewer, svgEl, setMinimapVisible, setRotationLocked: rotate.setLocked };
+	return { viewer, svgEl, setRotationLocked: rotate.setLocked };
 }

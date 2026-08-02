@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "PowerShell(\"==== TSC ====\")",
+      "PowerShell(npm run build 2>&1 | Select-String -Pattern \"error|Error|built in\"; npx tsc --noEmit 2>&1 | Select-Object -First 40; \"tsc exit: $LASTEXITCODE\")"
+    ]
+  }
+}

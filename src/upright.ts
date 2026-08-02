@@ -18,7 +18,7 @@ interface Billboard {
  * the DOM (OSD "open"), so getBBox() works.
  */
 export function initUpright(viewer: OpenSeadragon.Viewer, svgEl: SVGSVGElement, cfg: AppConfig): void {
-	const ids = cfg.layers.filter((l) => l.upright).map((l) => l.id);
+	const ids = cfg.layers.flatMap((l) => [...(l.upright ? (l.ids ?? [l.id]) : []), ...(l.uprightIds ?? [])]);
 	if (ids.length === 0) return;
 
 	const items: Billboard[] = [];

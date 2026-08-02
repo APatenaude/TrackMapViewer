@@ -11,7 +11,15 @@ export function defaultState(cfg: AppConfig): PersistedState {
 	for (const l of cfg.layers) {
 		layers[l.id] = { visible: l.defaultOn, opacity: l.defaultOpacity };
 	}
-	return { view: null, layers, lang: detectBrowserLang(), minimap: true, drawingEnabled: true, rotationEnabled: true };
+	return {
+		view: null,
+		layers,
+		lang: detectBrowserLang(),
+		minimap: true,
+		drawingEnabled: true,
+		rotationEnabled: true,
+		replayEnabled: true,
+	};
 }
 
 export function loadState(cfg: AppConfig): PersistedState {
@@ -35,6 +43,7 @@ export function loadState(cfg: AppConfig): PersistedState {
 			minimap: stored.minimap ?? def.minimap,
 			drawingEnabled: stored.drawingEnabled ?? def.drawingEnabled,
 			rotationEnabled: stored.rotationEnabled ?? def.rotationEnabled,
+			replayEnabled: stored.replayEnabled ?? def.replayEnabled,
 		};
 	} catch {
 		return def;

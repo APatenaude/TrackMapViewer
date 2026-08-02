@@ -34,21 +34,6 @@ body {
 	transition: opacity 200ms ease;
 }
 
-/* ── OSD navigator (minimap) ──────────────────────────────────────────────── */
-/* OSD gives the navigator element the class `navigator` (not
- * `openseadragon-navigator`). Size is set in JS (viewer.ts sizeNavigator) and
- * visibility is toggled via the control's setVisible(). */
-#viewer .navigator {
-	z-index: 50 !important;
-	border-radius: 6px !important;
-	overflow: hidden !important;
-	cursor: pointer !important;
-	/* viewport-fit=cover sends content under the status bar - nudge the top-left
-	 * minimap clear of the iOS clock/notch. env() is 0 elsewhere. */
-	margin-top: env(safe-area-inset-top, 0px) !important;
-	margin-left: env(safe-area-inset-left, 0px) !important;
-}
-
 /* ── FAB (floating action button) ─────────────────────────────────────────── */
 .fab {
 	position: fixed;
@@ -432,10 +417,7 @@ body.safe-area-bottom .panel {
 	cursor: pointer;
 }
 
-.layer-toggle,
-.minimap-toggle,
-.drawing-toggle,
-.rotation-toggle {
+.layer-toggle {
 	width: 18px;
 	height: 18px;
 	flex-shrink: 0;
@@ -458,21 +440,6 @@ body.safe-area-bottom .panel {
 	accent-color: var(--c-divider);
 	cursor: default;
 	opacity: 0.9;
-}
-
-/* Minimap / Drawing / Rotation toggles - three columns above the layers. */
-.toggle-grid {
-	display: grid;
-	grid-template-columns: repeat(3, 1fr);
-	gap: 10px;
-	padding-bottom: 14px;
-	margin-bottom: 14px;
-	border-bottom: 1px solid var(--c-divider);
-}
-.toggle-grid .toggle-label {
-	flex-direction: column;
-	gap: 6px;
-	text-align: center;
 }
 
 /* ── Share modal ──────────────────────────────────────────────────────────── */
@@ -625,4 +592,137 @@ body.safe-area-bottom .panel {
 
 .install-card .modal-actions {
 	justify-content: flex-end;
+}
+
+/* ── Lap replay ───────────────────────────────────────────────────────────── */
+/* Playback bar: a floating pill, bottom-centre. Sibling of #viewer (its events
+ * never reach OSD); above the panel (100), below the modal (300). */
+.replay-bar {
+	position: fixed;
+	left: 50%;
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+	transform: translateX(-50%);
+	z-index: 150;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 7px;
+	width: min(380px, calc(100vw - 32px));
+	padding: 7px 14px 9px;
+	border-radius: 16px;
+	background: var(--c-surface);
+	border: 1px solid var(--c-border);
+	box-shadow: var(--shadow-modal);
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+}
+/* .replay-bar sets display:flex, which would override the [hidden] default. */
+.replay-bar[hidden] {
+	display: none;
+}
+
+/* Button row above the full-width scrubber - a centred cluster: speed, play, orient. */
+.replay-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 16px;
+}
+
+.replay-btn {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	cursor: pointer;
+	color: #fff;
+	background: var(--c-accent);
+	transition:
+		background 120ms,
+		transform 120ms ease;
+}
+.replay-btn:active {
+	transform: scale(0.92);
+}
+
+.replay-play {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+}
+
+.replay-speed {
+	min-width: 46px;
+	height: 32px;
+	padding: 0 10px;
+	border-radius: 16px;
+	background: var(--c-surface-2);
+	color: var(--c-text);
+	border: 1px solid var(--c-border);
+	font-size: 13px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+.replay-speed:hover {
+	background: var(--c-surface-3);
+}
+
+/* Orient toggle: surface when off, accent when on. */
+.replay-orient {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: var(--c-surface-2);
+	color: var(--c-text);
+	border: 1px solid var(--c-border);
+}
+.replay-orient:hover {
+	background: var(--c-surface-3);
+}
+.replay-orient.active {
+	background: var(--c-accent);
+	color: #fff;
+	border-color: transparent;
+}
+
+/* Scrubber: full-width track under the buttons, for precise scrubbing. */
+.replay-scrubber {
+	width: 100%;
+	height: 22px;
+	margin: 0;
+	accent-color: var(--c-accent);
+	cursor: pointer;
+	touch-action: none;
+}
+
+/* Authoring readout: live path position (u), floats just above the bar. */
+.replay-pos {
+	position: fixed;
+	left: 50%;
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
+	transform: translateX(-50%);
+	z-index: 150;
+	padding: 3px 9px;
+	border-radius: 8px;
+	background: var(--c-surface);
+	border: 1px solid var(--c-border);
+	color: var(--c-text);
+	font: 12px / 1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-variant-numeric: tabular-nums;
+	pointer-events: none;
+}
+.replay-pos[hidden] {
+	display: none;
+}
+
+/* Replay FAB highlights in the accent colour while the bar is open. */
+.replay-fab.active {
+	background: var(--c-accent);
+	color: #fff;
+	border-color: transparent;
+	box-shadow:
+		0 0 0 3px color-mix(in srgb, var(--c-accent) 35%, transparent),
+		var(--shadow-fab);
 }

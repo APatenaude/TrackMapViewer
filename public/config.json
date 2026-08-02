@@ -7,6 +7,26 @@
 	"title": { "en": "Track Map", "fr": "Carte circuit" },
 	"trackName": "Tremblant",
 	"northOffset": 180,
+	"replay": {
+		"startOffset": 0,
+		"reverse": false,
+		"follow": true,
+		"initialZoom": 5,
+		"followSmoothing": 0.4,
+		"followOrient": true,
+		"orientSmoothing": 1,
+		"lookAhead": 0.25,
+		"speedPoints": [
+			{ "u": 0.0, "speed": 1.0 },
+			{ "u": 0.1, "speed": 0.4 },
+			{ "u": 0.2, "speed": 1.0 },
+			{ "u": 0.35, "speed": 0.35 },
+			{ "u": 0.5, "speed": 1.0 },
+			{ "u": 0.65, "speed": 0.4 },
+			{ "u": 0.8, "speed": 1.0 },
+			{ "u": 0.9, "speed": 0.5 }
+		]
+	},
 	"layers": [
 		{
 			"id": "corner_numbers",
@@ -25,28 +45,17 @@
 			"id": "racing_line",
 			"label": { "en": "Driving line", "fr": "Ligne de conduite" },
 			"defaultOn": true,
-			"defaultOpacity": 1.0
+			"defaultOpacity": 1.0,
+			"ids": ["racing_line", "cars"]
 		},
-		{ "id": "cars", "label": { "en": "Cars", "fr": "Voitures" }, "defaultOn": true, "defaultOpacity": 1.0 },
 		{ "id": "apex", "label": { "en": "Apexes", "fr": "Apex" }, "defaultOn": true, "defaultOpacity": 1.0 },
 		{
-			"id": "passing_zones",
-			"label": { "en": "Passing zones", "fr": "Zones de dépassement" },
-			"defaultOn": true,
-			"defaultOpacity": 1.0
-		},
-		{
 			"id": "references",
-			"label": { "en": "Reference points", "fr": "Points de repère" },
-			"defaultOn": true,
-			"defaultOpacity": 1.0
-		},
-		{
-			"id": "compression_crest",
-			"label": { "en": "Compressions & crests", "fr": "Compressions et crêtes" },
+			"label": { "en": "References", "fr": "Repères" },
 			"defaultOn": true,
 			"defaultOpacity": 1.0,
-			"upright": true
+			"ids": ["references", "passing_zones", "compression_crest"],
+			"uprightIds": ["compression_crest"]
 		}
 	]
 }
