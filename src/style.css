@@ -394,6 +394,23 @@ body.safe-area-bottom .panel {
 	color: var(--c-text-bright);
 }
 
+/* ── Track / line pickers (radio lists above the layers) ──────────────────── */
+.choice-group {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-bottom: 18px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--c-divider);
+}
+.choice-title {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--c-muted);
+}
+
 /* ── Layer rows (incl. the minimap toggle row) ────────────────────────────── */
 .layer-list {
 	list-style: none;

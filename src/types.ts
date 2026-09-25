@@ -41,52 +41,22 @@ export interface AnalyticsConfig {
 	websiteId: string;
 }
 
-/** A lap-replay speed control point. Authoring data only: never shown in the UI. */
+/** A lap-replay speed control point (built from a line's nodes). Never shown in the UI. */
 export interface ReplaySpeedPoint {
-	/** Path-normalized position in [0,1] (0 = start of the path `d`). */
+	/** Position along the line in [0,1], in travel order from the lap start. */
 	u: number;
 	/** Speed in km/h; between points the car accelerates/brakes at a constant rate. */
 	kmh: number;
 }
 
-export interface ReplayConfig {
-	/** Path-normalized position [0,1] where the lap starts (start/finish line). */
-	startOffset?: number;
-	/** Travel the loop in the opposite direction to the path `d`. */
-	reverse?: boolean;
-	/** Speed control points (interpolated); omit to use the auto curvature profile. */
-	speedPoints?: ReplaySpeedPoint[];
-	/** Open replay in Follow mode (camera rides with the car) rather than Fixed. Default true. */
-	follow?: boolean;
-	/** Meters across the short side of the map area above the replay bar, when Follow first zooms in. Default 170. */
-	viewSpanM?: number;
-	/** Start with heading-up on (map rotates so the car points up). Default false. */
-	followOrient?: boolean;
-	/** With heading-up on at open, the car starts this far below the centre, as a fraction of the map area above the replay bar (0-0.4). Default 0.25. */
-	lookAhead?: number;
-}
-
+/** App-wide settings (public/config.json). Everything about a track lives in its track.json. */
 export interface AppConfig {
-	imageWidth: number;
-	imageHeight: number;
-	/** Real length of the racing line loop in meters: the image scale, and with speedPoints 1x replay is real time. */
-	trackLengthM?: number;
-	/** Image pixels per SVG user unit. Maps the SVG coordinate space onto the
-	 *  background pixel space. Defaults to 1 when omitted. */
-	svgScale?: number;
-	/** Path to the vector overlay SVG. Defaults to '/track.svg'. */
-	svgPath?: string;
-	/** Path to the DZI tile source. Defaults to '/tiles/track.dzi'. */
-	tileSource?: string;
 	title: LocalizedString;
-	/** Track name appended to the tab title, e.g. "Track Map - Tremblant". */
-	trackName?: string;
-	/** Bearing of true north in the image (deg clockwise from image-up). Aims the compass needle only. */
-	northOffset?: number;
+	/** Track shown at the bare URL (and for unknown track names). Defaults to the first track. */
+	defaultTrack?: string;
+	/** Layer toggles; ids are the overlay group ids (see trackRender.ts LAYER_GROUP_IDS). */
 	layers: LayerConfig[];
 	analytics?: AnalyticsConfig;
-	/** Lap replay: start point, direction, speeds and camera defaults. */
-	replay?: ReplayConfig;
 }
 
 export interface LayerState {
@@ -106,4 +76,8 @@ export interface PersistedState {
 	rotationEnabled: boolean;
 	/** Whether the lap-replay tool / its FAB is available (Options checkbox). */
 	replayEnabled: boolean;
+	/** Selected racing line per track (slug -> line id). */
+	lines: Record<string, string>;
+	/** Track opened last: the bare URL (and the installed app's start page) reopens it. */
+	lastTrack?: string;
 }

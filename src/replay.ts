@@ -2,24 +2,21 @@ import OpenSeadragon from "openseadragon";
 import type { FabResult } from "./fab.js";
 import { t } from "./i18n.js";
 import { createCarElement, positionCar } from "./replayCar.js";
-import { createPolylineSampler, samplePath, type PathSampler, type PathSampling } from "./replayPath.js";
-import { createManualTimeline, createProfileTimeline, wrap01, type LapTimeline } from "./replayTimeline.js";
+import type { PathSampler } from "./replayPath.js";
+import { createManualTimeline, createProfileTimeline, type LapTimeline } from "./replayTimeline.js";
 import { getViewportRotation, setViewportRotation } from "./rotate.js";
-import type { AppConfig } from "./types.js";
+import type { RacingLine, TrackDoc } from "./trackDoc.js";
+import { lineTrace } from "./trackRender.js";
 
-const PATH_SELECTOR = "#racing_line path";
-const PATH_SAMPLES = 2048;
-const SAMPLE_START_MS = 1000; // let the first tiles load before sampling the line
-const SAMPLE_CHUNK_MS = 8;
 const SPEEDS = [0.25, 0.5, 0.75, 1] as const;
 const DEFAULT_SPEED_INDEX = 3; // 1x
 const SCRUB_MAX = 1000; // integer resolution of the range input
-// Curvature auto-profile (fallback when config has no speedPoints).
+// Curvature auto-profile (fallback when no node of the line has a speed).
 const PROFILE_OPTS = { minSpeed: 0.15, maxSpeed: 1, smoothing: 15 };
 // Heading half-windows: short for the car sprite, long for the camera so kinks in the drawn line don't twitch the map.
 const CAR_HEADING_M = 3;
 const CAM_HEADING_M = 20;
-const ASSUMED_TRACK_M = 4000; // scale guess when config has no trackLengthM
+const ASSUMED_TRACK_M = 4000; // scale guess when the track has no metersPerPixel
 const GLIDE_TAU_S = 0.18;
 const ROTATE_TAU_S = 0.4; // heading-up easing in
 const EDGE_PX = 32; // while playing, the car stays at least this far inside the visible area
@@ -35,6 +32,8 @@ const ORIENT_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="curre
 export interface ReplayApi {
 	/** Show/hide the replay FAB and enable/disable the tool (Options checkbox). */
 	setEnabled: (on: boolean) => void;
+	/** Drive another racing line (the one selected in Options). */
+	setLine: (line: RacingLine | undefined) => void;
 }
 
 /** Car screen spot as fractions of the visible map area (above the replay bar). */
@@ -73,22 +72,19 @@ export function initReplay(
 	svgEl: SVGSVGElement,
 	fab: FabResult,
 	closePanel: () => void,
-	cfg: AppConfig,
+	track: TrackDoc,
+	initialLine: RacingLine | undefined,
 	isStroking: () => boolean,
 	setRotationPivot: (pivot: (() => OpenSeadragon.Point | null) | null) => void,
 ): ReplayApi {
-	const rc = cfg.replay ?? {};
-	const reverse = rc.reverse === true;
-	// Config positions are along the path `d`; the sampler runs in travel order.
-	const toTravelU = (u: number): number => (reverse ? wrap01(1 - u) : wrap01(u));
-	const trackM = cfg.trackLengthM && cfg.trackLengthM > 0 ? cfg.trackLengthM : undefined;
+	const rc = track.replay ?? {};
 	const viewSpanM = rc.viewSpanM ?? 170;
 	const lookAhead = Math.min(0.4, Math.max(0, rc.lookAhead ?? 0.25));
 	const vp = viewer.viewport;
 	const vpi = vp as unknown as ViewportInternals;
 
-	// Engine (built once the overlay is attached + measurable).
-	let sampling: PathSampling | null = null;
+	// Engine (rebuilt when the line changes).
+	let line = initialLine;
 	let sampler: PathSampler | null = null;
 	let timeline: LapTimeline | null = null;
 	let car: SVGGElement | null = null;
@@ -166,56 +162,21 @@ export function initReplay(
 		orientBtn.disabled = !follow;
 	}
 
-	function findPath(): SVGPathElement | null {
-		return svgEl.querySelector<SVGPathElement>(PATH_SELECTOR);
-	}
-
-	function startSampling(): boolean {
-		if (sampling) return true;
-		const path = findPath();
-		if (!path || viewer.world.getItemCount() === 0) return false;
-		try {
-			sampling = samplePath(path, PATH_SAMPLES, reverse);
-		} catch {
-			return false; // overlay not laid out yet
-		}
-		return true;
-	}
-
-	// Sample the line in idle time after the tiles open, so startup never blocks and a
-	// later first tap has nothing left to do.
-	const whenIdle = (cb: (budgetMs: number) => void): void => {
-		if ("requestIdleCallback" in window) requestIdleCallback((d) => cb(Math.max(1, d.timeRemaining())));
-		else setTimeout(() => cb(SAMPLE_CHUNK_MS), 16);
-	};
-	function pumpSampling(budgetMs = SAMPLE_CHUNK_MS): void {
-		if (sampler || !findPath()) return;
-		if (!startSampling()) {
-			setTimeout(pumpSampling, 250);
-			return;
-		}
-		if (!sampling!.advance(budgetMs)) whenIdle(pumpSampling);
-	}
-
 	function buildEngine(): boolean {
 		if (sampler && timeline) return true;
-		if (!startSampling()) return false;
-		sampling!.advance(Infinity);
-		sampler = createPolylineSampler(sampling!.points);
+		if (!line || line.nodes.length < 2 || viewer.world.getItemCount() === 0) return false;
+		const trace = lineTrace(line);
+		sampler = trace.sampler;
+		const trackM = track.metersPerPixel ? sampler.total * track.metersPerPixel : undefined;
 		pxPerM = sampler.total / (trackM ?? ASSUMED_TRACK_M);
-		const startOffset = toTravelU(rc.startOffset ?? 0);
-		const pts = (rc.speedPoints ?? []).filter((p) => Number.isFinite(p.u) && Number.isFinite(p.kmh));
-		if (pts.length < (rc.speedPoints?.length ?? 0)) {
-			console.warn("replay: ignoring speedPoints without a numeric u/kmh (old {u, speed} format?)");
-		}
+		// Nodes with a speed become the timeline's control points; the first node is the lap start.
+		const pts = line.nodes.flatMap((n, i) =>
+			n.kmh !== undefined && Number.isFinite(n.kmh) ? [{ u: trace.nodeDist[i] / sampler!.total, kmh: n.kmh }] : [],
+		);
 		timeline =
 			pts.length > 0
-				? createManualTimeline(sampler, {
-						startOffset,
-						trackLengthM: trackM,
-						speedPoints: pts.map((p) => ({ u: toTravelU(p.u), kmh: p.kmh })),
-					})
-				: createProfileTimeline(sampler, { ...PROFILE_OPTS, startOffset });
+				? createManualTimeline(sampler, { trackLengthM: trackM, speedPoints: pts })
+				: createProfileTimeline(sampler, PROFILE_OPTS);
 		return true;
 	}
 
@@ -532,16 +493,28 @@ export function initReplay(
 		if (follow) glide = true;
 	});
 
-	viewer.addHandler("open", () => {
-		setTimeout(pumpSampling, SAMPLE_START_MS);
-	});
-
 	return {
 		setEnabled(on: boolean): void {
 			enabled = on;
 			btn.hidden = !on;
 			fab.reposition();
 			if (!on) setActive(false); // hiding the tool tears down the bar + car
+		},
+		setLine(next: RacingLine | undefined): void {
+			if (next === line) return;
+			line = next;
+			sampler = null;
+			timeline = null;
+			if (!active) return;
+			// Same lap position on the new line; the camera eases over to it.
+			if (!buildEngine()) {
+				setActive(false);
+				return;
+			}
+			prevDist = timeline!.distanceAt(progress);
+			dirty = true;
+			if (follow) glide = true;
+			viewer.forceRedraw();
 		},
 	};
 }

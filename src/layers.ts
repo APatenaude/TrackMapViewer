@@ -2,13 +2,27 @@ import { track } from "./analytics.js";
 import { getLang, pick, registerI18n, setLang } from "./i18n.js";
 import { openShareModal } from "./share.js";
 import { encodeShareState } from "./shareState.js";
-import type { AppConfig, Lang, LayerConfig, PersistedState } from "./types.js";
+import type { AppConfig, Lang, LayerConfig, LocalizedString, PersistedState } from "./types.js";
 
 const INSTALL_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>`;
+
+export interface Choice {
+	id: string;
+	name: LocalizedString;
+}
 
 export interface LayersOptions {
 	/** Called when the panel opens/closes (e.g. to move the FAB out of the way). */
 	onOpenChange?: (open: boolean) => void;
+	/** Tracks to switch between (listed only when there are 2+); picking one opens /<slug>. */
+	tracks?: Choice[];
+	currentTrack?: string;
+	/** The track's racing lines (listed only when there are 2+); one is shown at a time. */
+	lines?: Choice[];
+	currentLine?: string;
+	onLineChange?: (id: string) => void;
+	/** Line to put in share links, when it isn't the track's default. */
+	shareLine?: () => string | undefined;
 }
 
 export interface LayersResult {
@@ -90,6 +104,52 @@ export function initLayers(
 
 	const list = panel.querySelector(".layer-list")!;
 
+	// Track + line pickers (radio lists), above the layer toggles.
+	const choiceNames: { el: HTMLElement; name: LocalizedString }[] = [];
+	function choiceGroup(
+		titleKey: string,
+		name: string,
+		items: Choice[],
+		current: string | undefined,
+		onPick: (id: string) => void,
+	): void {
+		if (items.length < 2) return;
+		const group = document.createElement("div");
+		group.className = "choice-group";
+		group.setAttribute("role", "radiogroup");
+		const title = document.createElement("div");
+		title.className = "choice-title";
+		title.dataset.i18n = titleKey;
+		group.appendChild(title);
+		for (const item of items) {
+			const label = document.createElement("label");
+			label.className = "toggle-label";
+			const input = document.createElement("input");
+			input.type = "radio";
+			input.name = name;
+			input.className = "layer-toggle";
+			input.value = item.id;
+			input.checked = item.id === current;
+			input.addEventListener("change", () => {
+				if (input.checked) onPick(item.id);
+			});
+			const text = document.createElement("span");
+			text.className = "layer-name";
+			choiceNames.push({ el: text, name: item.name });
+			label.append(input, text);
+			group.appendChild(label);
+		}
+		list.before(group);
+	}
+	choiceGroup("trackList", "track", opts.tracks ?? [], opts.currentTrack, (slug) => {
+		track("track_switch", { track: slug });
+		location.assign(`/${encodeURIComponent(slug)}`);
+	});
+	choiceGroup("lineList", "line", opts.lines ?? [], opts.currentLine, (id) => {
+		opts.onLineChange?.(id);
+		track("line_switch", { line: id });
+	});
+
 	// Build a row per configured layer
 	for (const layer of cfg.layers) {
 		const groups = layerGroups(svgEl, layer);
@@ -167,7 +227,7 @@ export function initLayers(
 
 	// Share - encode the current layer settings into the link.
 	panel.querySelector(".panel-share")!.addEventListener("click", () => {
-		const url = location.origin + location.pathname + encodeShareState(cfg, state);
+		const url = location.origin + location.pathname + encodeShareState(cfg, state, opts.shareLine?.());
 		openShareModal(url).catch(console.error);
 	});
 
@@ -187,6 +247,7 @@ export function initLayers(
 			const nameEl = panel.querySelector<HTMLElement>(`.layer-name[data-id="${layer.id}"]`);
 			if (nameEl) nameEl.textContent = pick(layer.label);
 		}
+		for (const c of choiceNames) c.el.textContent = pick(c.name);
 		panel.querySelectorAll<HTMLButtonElement>(".lang-btn").forEach((b) => {
 			const active = b.dataset.lang === getLang();
 			b.classList.toggle("active", active);

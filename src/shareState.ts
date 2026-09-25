@@ -24,10 +24,14 @@ import type { AppConfig, PersistedState } from "./types.js";
  * Payload (v2): v1 + `drawing`/`rotation` (0|1 tool toggles) + optional
  *   `view: [x, y, zoom, rotationDeg]` (viewport coords; x/y/zoom fractional,
  *   rotationDeg an integer). `view` is present only when a view exists.
- * Encoded as base64url of the JSON. decodeShareState() understands v1 and v2.
+ * Payload (v3): v2 + `line` (racing line id). Only written when the line isn't the
+ *   track's default, so ordinary links stay v2 (readable by not-yet-updated apps).
+ * Since tracks got their own URLs the track is the path (/<slug>?s=...); a bare
+ *   /?s=... link predates that and always means Tremblant (see main.ts).
+ * Encoded as base64url of the JSON. decodeShareState() understands v1, v2 and v3.
  * ────────────────────────────────────────────────────────────────────────── */
 
-export const SHARE_STATE_VERSION = 2;
+export const SHARE_STATE_VERSION = 3;
 
 const PARAM = "s";
 
@@ -38,6 +42,7 @@ export interface SharedState {
 	drawing?: boolean;
 	rotation?: boolean;
 	view?: { x: number; y: number; zoom: number; rotation: number };
+	line?: string;
 }
 
 const round = (n: number, dp: number): number => {
@@ -54,8 +59,8 @@ function fromBase64Url(s: string): string {
 	return atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
 }
 
-/** Build the `?s=…` query string (including the leading `?`) from current state. */
-export function encodeShareState(cfg: AppConfig, state: PersistedState): string {
+/** Build the `?s=…` query string (including the leading `?`) from current state. `line`: a non-default line. */
+export function encodeShareState(cfg: AppConfig, state: PersistedState, line?: string): string {
 	const layers: Record<string, [number, number]> = {};
 	for (const layer of cfg.layers) {
 		const s = state.layers[layer.id];
@@ -69,13 +74,15 @@ export function encodeShareState(cfg: AppConfig, state: PersistedState): string 
 		drawing: number;
 		rotation: number;
 		view?: [number, number, number, number];
+		line?: string;
 	} = {
-		v: SHARE_STATE_VERSION,
+		v: line ? SHARE_STATE_VERSION : 2,
 		layers,
 		minimap: state.minimap ? 1 : 0,
 		drawing: state.drawingEnabled ? 1 : 0,
 		rotation: state.rotationEnabled ? 1 : 0,
 	};
+	if (line) payload.line = line;
 	if (state.view) {
 		const { x, y, zoom, rotation } = state.view;
 		payload.view = [round(x, 4), round(y, 4), round(zoom, 3), Math.round(rotation)];
@@ -99,10 +106,11 @@ export function decodeShareState(search: string): SharedState | null {
 			drawing?: number;
 			rotation?: number;
 			view?: [number, number, number, number];
+			line?: string;
 		};
 
-		// Understand v1 and v2; ignore anything else so old/garbled links fail safe to defaults.
-		if (payload.v !== 1 && payload.v !== 2) return null;
+		// Understand v1-v3; ignore anything else so old/garbled links fail safe to defaults.
+		if (payload.v !== 1 && payload.v !== 2 && payload.v !== 3) return null;
 
 		const layers: SharedState["layers"] = {};
 		for (const [id, tuple] of Object.entries(payload.layers ?? {})) {
@@ -126,6 +134,7 @@ export function decodeShareState(search: string): SharedState | null {
 		if (Array.isArray(view) && view.length >= 4 && view.every((n) => typeof n === "number" && isFinite(n))) {
 			result.view = { x: view[0], y: view[1], zoom: view[2], rotation: view[3] };
 		}
+		if (typeof payload.line === "string" && payload.line) result.line = payload.line;
 		return result;
 	} catch {
 		return null;

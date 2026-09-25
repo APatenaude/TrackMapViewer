@@ -19,6 +19,7 @@ export function defaultState(cfg: AppConfig): PersistedState {
 		drawingEnabled: true,
 		rotationEnabled: true,
 		replayEnabled: true,
+		lines: {},
 	};
 }
 
@@ -44,6 +45,8 @@ export function loadState(cfg: AppConfig): PersistedState {
 			drawingEnabled: stored.drawingEnabled ?? def.drawingEnabled,
 			rotationEnabled: stored.rotationEnabled ?? def.rotationEnabled,
 			replayEnabled: stored.replayEnabled ?? def.replayEnabled,
+			lines: stored.lines && typeof stored.lines === "object" ? stored.lines : def.lines,
+			lastTrack: typeof stored.lastTrack === "string" ? stored.lastTrack : undefined,
 		};
 	} catch {
 		return def;
@@ -53,5 +56,9 @@ export function loadState(cfg: AppConfig): PersistedState {
 export function saveState(state: PersistedState): void {
 	// Drop `view` - pan/zoom/rotation must not survive a reload (memory-only, for share links).
 	const { view: _view, ...rest } = state;
-	localStorage.setItem(STATE_KEY, JSON.stringify(rest));
+	try {
+		localStorage.setItem(STATE_KEY, JSON.stringify(rest));
+	} catch {
+		// Storage blocked or full: settings just don't persist.
+	}
 }

@@ -14,6 +14,12 @@ export interface PathSampler {
 	pointAt(dist: number): Point;
 	/** Heading in degrees (for `rotate(...)`) of the chord from dist - halfWindow to dist + halfWindow. */
 	headingDeg(dist: number, halfWindow: number): number;
+	/** Arc-length of the polyline's `index`-th point. */
+	distanceOf(index: number): number;
+	/** Arc-length of the spot on the loop nearest to `p`. */
+	project(p: Point): number;
+	/** The loop from `from` to `to` in travel order (wrapping past the start), endpoints included. */
+	slice(from: number, to: number): Point[];
 }
 
 /**
@@ -52,51 +58,47 @@ export function createPolylineSampler(points: Point[]): PathSampler {
 		return (Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180) / Math.PI;
 	}
 
-	return { total, pointAt, headingDeg };
-}
-
-/** Incremental sampling of a <path> into image-px points. */
-export interface PathSampling {
-	readonly points: Point[];
-	/** Sample until `budgetMs` elapses (Infinity = finish now); true once every point is in. */
-	advance(budgetMs: number): boolean;
-}
-
-/**
- * Samples `count` points evenly along a racing-line <path>, in travel order
- * (`reverse` walks the path `d` backwards). getPointAtLength is slow (~0.2 ms a
- * call in Chromium), so the work is split into time-boxed chunks.
- */
-export function samplePath(path: SVGPathElement, count: number, reverse = false): PathSampling {
-	// Map path-local d-space -> overlay viewBox (image-pixel) space. Composing the
-	// two screen CTMs cancels OSD's live zoom/pan/rotation, leaving only the static
-	// internal SVG transforms (scale + group translates). getCTM() targets the wrong
-	// space here (the car landed offset + shrunk in a corner), so avoid it.
-	const root = path.ownerSVGElement;
-	const pathScreen = path.getScreenCTM();
-	const rootScreen = root?.getScreenCTM();
-	if (!root || !pathScreen || !rootScreen) {
-		throw new Error("samplePath: overlay not rendered (screen CTM unavailable)");
+	function distanceOf(index: number): number {
+		return cum[((index % n) + n) % n];
 	}
-	const ctm = rootScreen.inverse().multiply(pathScreen);
-	if (![ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f].every(Number.isFinite)) {
-		throw new Error("samplePath: degenerate CTM (overlay not laid out yet)");
-	}
-	const length = path.getTotalLength();
-	const points: Point[] = [];
 
-	return {
-		points,
-		advance(budgetMs: number): boolean {
-			const end = performance.now() + budgetMs;
-			while (points.length < count) {
-				const i = points.length;
-				const p = path.getPointAtLength(((reverse ? count - i : i) / count) * length);
-				const q = new DOMPoint(p.x, p.y).matrixTransform(ctm);
-				points.push({ x: q.x, y: q.y });
-				if (performance.now() >= end) break;
+	function project(p: Point): number {
+		let best = 0;
+		let bestD2 = Infinity;
+		for (let i = 0; i < n; i++) {
+			const a = points[i];
+			const b = points[(i + 1) % n];
+			const vx = b.x - a.x;
+			const vy = b.y - a.y;
+			const len2 = vx * vx + vy * vy;
+			const t = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2)) : 0;
+			const dx = a.x + vx * t - p.x;
+			const dy = a.y + vy * t - p.y;
+			const d2 = dx * dx + dy * dy;
+			if (d2 < bestD2) {
+				bestD2 = d2;
+				const end = i === n - 1 ? total : cum[i + 1];
+				best = cum[i] + (end - cum[i]) * t;
 			}
-			return points.length >= count;
-		},
-	};
+		}
+		return best;
+	}
+
+	function slice(from: number, to: number): Point[] {
+		const a = ((from % total) + total) % total;
+		let b = ((to % total) + total) % total;
+		if (b <= a) b += total;
+		const out: Point[] = [pointAt(a)];
+		// Every polyline vertex strictly inside (a, b), walking forward (second lap for the wrap).
+		for (let lap = 0; lap < 2; lap++) {
+			for (let i = 0; i < n; i++) {
+				const d = cum[i] + lap * total;
+				if (d > a && d < b) out.push(points[i]);
+			}
+		}
+		out.push(pointAt(b));
+		return out;
+	}
+
+	return { total, pointAt, headingDeg, distanceOf, project, slice };
 }

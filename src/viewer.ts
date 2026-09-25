@@ -1,6 +1,8 @@
 import OpenSeadragon from "openseadragon";
 import { initRotate, setViewportRotation, type RotateController } from "./rotate.js";
-import { initUpright } from "./upright.js";
+import type { TrackDoc } from "./trackDoc.js";
+import { createLayerGroups, renderTrack } from "./trackRender.js";
+import { initUpright, type UprightController } from "./upright.js";
 import type { AppConfig, PersistedState } from "./types.js";
 
 export interface ViewerResult {
@@ -10,42 +12,39 @@ export interface ViewerResult {
 	setRotationLocked: (locked: boolean) => void;
 	/** Rotation gestures pivot on this container pixel when it returns one (see rotate.ts setPivot). */
 	setRotationPivot: RotateController["setPivot"];
+	/** Redraw the overlay for another racing line of the track. */
+	setLine: (lineId: string) => void;
 }
 
 export function initViewer(
 	container: HTMLElement,
 	cfg: AppConfig,
-	svgDoc: Document,
+	doc: TrackDoc,
+	tileSource: string,
+	lineId: string | undefined,
 	state: PersistedState,
 	onViewChange: (x: number, y: number, zoom: number, rotation: number) => void,
 ): ViewerResult {
+	const { width, height } = doc.image;
 	const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-	svgEl.setAttribute("viewBox", `0 0 ${cfg.imageWidth} ${cfg.imageHeight}`);
+	svgEl.setAttribute("viewBox", `0 0 ${width} ${height}`);
 	svgEl.setAttribute("preserveAspectRatio", "xMinYMin meet");
 	svgEl.style.width = "100%";
 	svgEl.style.height = "100%";
 	svgEl.style.pointerEvents = "none";
 
-	// Carry over <defs>/<style> too (e.g. .st0 fill rules) - only adopted nodes render.
-	for (const node of Array.from(svgDoc.querySelectorAll("svg > defs, svg > style"))) {
-		svgEl.appendChild(document.adoptNode(node));
-	}
+	// The groups stay for the page's life (layer toggles hold them); a line switch refills them.
+	const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+	svgEl.appendChild(defs);
+	const groups = createLayerGroups();
+	for (const g of groups.values()) svgEl.appendChild(g);
+	renderTrack(doc, lineId, groups, defs);
 
-	// Scale the source SVG into image-pixel space (svgScale = image px per SVG unit).
-	const scale = cfg.svgScale ?? 1;
-	const scaleGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-	if (scale !== 1) scaleGroup.setAttribute("transform", `scale(${scale})`);
-
-	const sourceGroups = Array.from(svgDoc.querySelectorAll("svg > g"));
-	for (const g of sourceGroups) {
-		g.classList.add("layer-group");
-		scaleGroup.appendChild(document.adoptNode(g));
-	}
-	svgEl.appendChild(scaleGroup);
+	let upright: UprightController | null = null;
 
 	const viewer = new OpenSeadragon.Viewer({
 		element: container,
-		tileSources: cfg.tileSource ?? "/tiles/track.dzi",
+		tileSources: tileSource,
 		showNavigator: false,
 		maxZoomPixelRatio: 2.5, // zoom past native pixels (OSD's ~1.1 default is too low on desktop)
 		animationTime: 0.4,
@@ -80,9 +79,7 @@ export function initViewer(
 
 	viewer.addHandler("open", () => {
 		// Overlay covers the whole image, in viewport coords.
-		const rect = viewer.viewport.imageToViewportRectangle(
-			new OpenSeadragon.Rect(0, 0, cfg.imageWidth, cfg.imageHeight),
-		);
+		const rect = viewer.viewport.imageToViewportRectangle(new OpenSeadragon.Rect(0, 0, width, height));
 		// EXACT mode rotates the overlay (+ draw strokes) with the map.
 		// (Cast: OSD's type wants HTMLElement but accepts any Element.)
 		viewer.addOverlay({
@@ -101,7 +98,7 @@ export function initViewer(
 		}
 
 		// Billboard upright: true layers (e.g. corner numbers) to stay screen-upright when rotated.
-		initUpright(viewer, svgEl, cfg);
+		upright = initUpright(viewer, svgEl, cfg);
 	});
 
 	viewer.addHandler("animation-finish", () => {
@@ -115,5 +112,14 @@ export function initViewer(
 		onViewChange(center.x, center.y, viewer.viewport.getZoom(), rotation);
 	});
 
-	return { viewer, svgEl, setRotationLocked: rotate.setLocked, setRotationPivot: rotate.setPivot };
+	return {
+		viewer,
+		svgEl,
+		setRotationLocked: rotate.setLocked,
+		setRotationPivot: rotate.setPivot,
+		setLine(id: string): void {
+			renderTrack(doc, id, groups, defs);
+			upright?.refresh();
+		},
+	};
 }

@@ -1,6 +1,6 @@
 node_modules/
 dist/
-public/tiles/
+public/tracks/
 
 # Private deployment files - never commit
 .env

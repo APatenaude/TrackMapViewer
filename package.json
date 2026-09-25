@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "tile": "mkdir -p public/tiles && vips dzsave assets/tremblant.jpg public/tiles/tremblant --tile-size 256 --overlap 1 --suffix .jpg[Q=82]",
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "tiles": "node scripts/tiles.mjs"
   },
   "dependencies": {
     "openseadragon": "^4.1.0",
