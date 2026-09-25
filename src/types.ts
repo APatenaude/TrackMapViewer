@@ -41,12 +41,12 @@ export interface AnalyticsConfig {
 	websiteId: string;
 }
 
-/** A lap-replay speed control point: relative speed at a path position. */
+/** A lap-replay speed control point. Authoring data only: never shown in the UI. */
 export interface ReplaySpeedPoint {
 	/** Path-normalized position in [0,1] (0 = start of the path `d`). */
 	u: number;
-	/** Relative speed factor (> 0); bigger = faster. */
-	speed: number;
+	/** Speed in km/h; between points the car accelerates/brakes at a constant rate. */
+	kmh: number;
 }
 
 export interface ReplayConfig {
@@ -54,27 +54,23 @@ export interface ReplayConfig {
 	startOffset?: number;
 	/** Travel the loop in the opposite direction to the path `d`. */
 	reverse?: boolean;
-	/** Manual speed control points (interpolated); omit to use the auto curvature profile. */
+	/** Speed control points (interpolated); omit to use the auto curvature profile. */
 	speedPoints?: ReplaySpeedPoint[];
-	/** Pan/zoom the view to follow the car during replay (default true). */
+	/** Open replay in Follow mode (camera rides with the car) rather than Fixed. Default true. */
 	follow?: boolean;
-	/** Zoom the view to this OSD viewport zoom when replay starts (bigger = closer). Default 5. */
-	initialZoom?: number;
-	/** Deprecated alias for initialZoom. */
-	followZoom?: number;
-	/** Follow-cam smoothing 0..1 (0 = locked to the car, higher = smoother but laggier). Default 0.4. */
-	followSmoothing?: number;
-	/** Rotate the view so the car's direction of travel points up (chase cam). Default false. */
+	/** Meters across the short side of the map area above the replay bar, when Follow first zooms in. Default 170. */
+	viewSpanM?: number;
+	/** Start with heading-up on (map rotates so the car points up). Default false. */
 	followOrient?: boolean;
-	/** Orient-rotation smoothing 0..1 (higher = smoother/less jerky turns). Default 0.7. */
-	orientSmoothing?: number;
-	/** Shift the view ahead of the car (0 = centred, ~0.3 = car near the back). Default 0.25. */
+	/** With heading-up on at open, the car starts this far below the centre, as a fraction of the map area above the replay bar (0-0.4). Default 0.25. */
 	lookAhead?: number;
 }
 
 export interface AppConfig {
 	imageWidth: number;
-	imageHeight: number; // What the install button should do now; recomputed on demand for late-firing prompts.
+	imageHeight: number;
+	/** Real length of the racing line loop in meters: the image scale, and with speedPoints 1x replay is real time. */
+	trackLengthM?: number;
 	/** Image pixels per SVG user unit. Maps the SVG coordinate space onto the
 	 *  background pixel space. Defaults to 1 when omitted. */
 	svgScale?: number;
@@ -89,7 +85,7 @@ export interface AppConfig {
 	northOffset?: number;
 	layers: LayerConfig[];
 	analytics?: AnalyticsConfig;
-	/** Lap-replay tuning (start point, direction, manual speed profile). */
+	/** Lap replay: start point, direction, speeds and camera defaults. */
 	replay?: ReplayConfig;
 }
 

@@ -54,7 +54,7 @@ async function init(): Promise<void> {
 
 	const container = document.getElementById("viewer")!;
 	// View lives in memory only (feeds share links, never saved) - see state.ts saveState.
-	const { viewer, svgEl, setRotationLocked } = initViewer(
+	const { viewer, svgEl, setRotationLocked, setRotationPivot } = initViewer(
 		container,
 		cfg,
 		svgDoc,
@@ -79,7 +79,7 @@ async function init(): Promise<void> {
 	// Draw / compass / replay tools (mini-FAB satellites) + PWA install button (drawer header).
 	const drawApi = initDraw(viewer, svgEl, fab, layers.closePanel);
 	const compassApi = initCompass(viewer, fab, { northOffset: cfg.northOffset ?? 0, setRotationLocked });
-	const replayApi = initReplay(viewer, svgEl, fab, layers.closePanel, cfg.replay);
+	const replayApi = initReplay(viewer, svgEl, fab, layers.closePanel, cfg, drawApi.isStroking, setRotationPivot);
 	initInstall(document.querySelector<HTMLButtonElement>(".install-btn")!);
 
 	// The tools are always available (their toggles were removed).

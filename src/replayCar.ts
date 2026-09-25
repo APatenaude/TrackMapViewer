@@ -92,10 +92,10 @@ export function createCarElement(): SVGGElement {
 	return g;
 }
 
-/** Place + aim the car at arc-length `dist` along the sampler. */
-export function positionCar(car: SVGGElement, sampler: PathSampler, dist: number): void {
+/** Place + aim the car at arc-length `dist` along the sampler (heading over +-`headingWindow` px). */
+export function positionCar(car: SVGGElement, sampler: PathSampler, dist: number, headingWindow: number): void {
 	const p = sampler.pointAt(dist);
-	const deg = sampler.headingDeg(dist);
+	const deg = sampler.headingDeg(dist, headingWindow);
 	const x = Math.round(p.x * 100) / 100;
 	const y = Math.round(p.y * 100) / 100;
 	const r = Math.round(deg * 100) / 100;

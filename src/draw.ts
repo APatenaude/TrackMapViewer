@@ -28,6 +28,8 @@ const r = (n: number): number => Math.round(n * 10) / 10;
 export interface DrawApi {
 	/** Show/hide the draw FAB and enable/disable the tool (Options checkbox). */
 	setEnabled: (on: boolean) => void;
+	/** Whether a stroke is being drawn right now. */
+	isStroking: () => boolean;
 }
 
 export function initDraw(
@@ -224,5 +226,6 @@ export function initDraw(
 			btn.hidden = !on;
 			fab.reposition();
 		},
+		isStroking: () => current !== null,
 	};
 }

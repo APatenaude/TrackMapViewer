@@ -10,11 +10,18 @@ const MOUSE_ROTATE_DEG_PER_PX = 0.4;
 export interface RotateController {
 	/** Enable/disable the rotation gestures (driven by the compass long-press lock). */
 	setLocked: (locked: boolean) => void;
+	/** Rotate gestures about this container pixel when it returns one (e.g. the replay car), else the default pivot. */
+	setPivot: (pivot: (() => OpenSeadragon.Point | null) | null) => void;
 }
 
 /** setRotation with OSD's undocumented `immediately` flag (true = snap, no spring). */
 export function setViewportRotation(viewport: OpenSeadragon.Viewport, degrees: number, immediately = true): void {
 	(viewport.setRotation as (d: number, i?: boolean) => void)(degrees, immediately);
+}
+
+/** getRotation with OSD's `current` flag (true = mid-animation angle, the typings omit it). */
+export function getViewportRotation(viewport: OpenSeadragon.Viewport, current = true): number {
+	return (viewport.getRotation as (c?: boolean) => number)(current);
 }
 
 /**
@@ -36,19 +43,29 @@ export function initRotate(viewer: OpenSeadragon.Viewer, onChange: (rotation: nu
 	let mouseId: number | null = null; // active right-drag pointer
 	let mousePrevX = 0; // cursor X (client px) at the last move - for the horizontal delta
 	let locked = false;
+	let pivot: (() => OpenSeadragon.Point | null) | null = null;
 
-	// Rotate about the viewport centre (right-drag has no gesture point to pin).
+	// Rotate about the viewport centre (right-drag has no gesture point to pin), or the pivot.
 	function rotateView(deltaDeg: number): void {
+		const p = pivot?.();
+		if (p) {
+			rotateAboutPixel(deltaDeg, p);
+			return;
+		}
 		const vp = viewer.viewport;
 		setViewportRotation(vp, vp.getRotation() + deltaDeg);
 	}
 
-	// Rotate about the gesture point, not the centre: read the world point under a fixed
-	// pixel before/after rotating, then panBy the difference to cancel the drift.
+	// Rotate about the gesture point (or the pivot), not the centre.
 	function rotateAbout(deltaDeg: number, clientX: number, clientY: number): void {
-		const vp = viewer.viewport;
 		const r = container.getBoundingClientRect();
-		const anchor = new OpenSeadragon.Point(clientX - r.left, clientY - r.top); // element px
+		rotateAboutPixel(deltaDeg, pivot?.() ?? new OpenSeadragon.Point(clientX - r.left, clientY - r.top));
+	}
+
+	// Read the world point under a fixed element pixel before/after rotating, then panBy
+	// the difference to cancel the drift.
+	function rotateAboutPixel(deltaDeg: number, anchor: OpenSeadragon.Point): void {
+		const vp = viewer.viewport;
 		const before = vp.pointFromPixel(anchor, true);
 		setViewportRotation(vp, vp.getRotation() + deltaDeg);
 		const after = vp.pointFromPixel(anchor, true);
@@ -172,6 +189,9 @@ export function initRotate(viewer: OpenSeadragon.Viewer, onChange: (rotation: nu
 				twistAngle = null;
 				endMouse();
 			}
+		},
+		setPivot(p): void {
+			pivot = p;
 		},
 	};
 }

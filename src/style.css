@@ -622,12 +622,34 @@ body.safe-area-bottom .panel {
 	display: none;
 }
 
-/* Button row above the full-width scrubber - a centred cluster: speed, play, orient. */
+/* Button row above the full-width scrubber - a centred cluster: speed, play, follow, orient. */
 .replay-row {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 16px;
+}
+
+/* Camera toggle + caption, together as tall as the play button (28 + 2 + 10 = 40px).
+ * A <label>, so tapping the caption presses the button. */
+.replay-ctl {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	cursor: pointer;
+}
+.replay-label {
+	font-size: 10px;
+	line-height: 10px;
+	color: var(--c-muted);
+	white-space: nowrap;
+}
+.replay-ctl:has(:disabled) {
+	cursor: default;
+}
+.replay-ctl:has(:disabled) .replay-label {
+	opacity: 0.35;
 }
 
 .replay-btn {
@@ -669,22 +691,31 @@ body.safe-area-bottom .panel {
 	background: var(--c-surface-3);
 }
 
-/* Orient toggle: surface when off, accent when on. */
-.replay-orient {
-	width: 40px;
-	height: 40px;
+/* Camera toggles (follow, heading-up): surface when off, accent when on. */
+.replay-toggle {
+	width: 28px;
+	height: 28px;
 	border-radius: 50%;
 	background: var(--c-surface-2);
 	color: var(--c-text);
 	border: 1px solid var(--c-border);
 }
-.replay-orient:hover {
+.replay-toggle svg {
+	width: 16px;
+	height: 16px;
+}
+.replay-toggle:not(:disabled):hover {
 	background: var(--c-surface-3);
 }
-.replay-orient.active {
+.replay-toggle.active {
 	background: var(--c-accent);
 	color: #fff;
 	border-color: transparent;
+}
+.replay-toggle:disabled {
+	opacity: 0.35;
+	cursor: default;
+	transform: none;
 }
 
 /* Scrubber: full-width track under the buttons, for precise scrubbing. */
@@ -695,26 +726,6 @@ body.safe-area-bottom .panel {
 	accent-color: var(--c-accent);
 	cursor: pointer;
 	touch-action: none;
-}
-
-/* Authoring readout: live path position (u), floats just above the bar. */
-.replay-pos {
-	position: fixed;
-	left: 50%;
-	bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
-	transform: translateX(-50%);
-	z-index: 150;
-	padding: 3px 9px;
-	border-radius: 8px;
-	background: var(--c-surface);
-	border: 1px solid var(--c-border);
-	color: var(--c-text);
-	font: 12px / 1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-	font-variant-numeric: tabular-nums;
-	pointer-events: none;
-}
-.replay-pos[hidden] {
-	display: none;
 }
 
 /* Replay FAB highlights in the accent colour while the bar is open. */

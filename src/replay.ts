@@ -2,64 +2,97 @@ import OpenSeadragon from "openseadragon";
 import type { FabResult } from "./fab.js";
 import { t } from "./i18n.js";
 import { createCarElement, positionCar } from "./replayCar.js";
-import { createPathSampler, type PathSampler } from "./replayPath.js";
-import {
-	createLinearTimeline,
-	createManualTimeline,
-	createProfileTimeline,
-	type LapTimeline,
-} from "./replayTimeline.js";
-import type { ReplayConfig } from "./types.js";
+import { createPolylineSampler, samplePath, type PathSampler, type PathSampling } from "./replayPath.js";
+import { createManualTimeline, createProfileTimeline, wrap01, type LapTimeline } from "./replayTimeline.js";
+import { getViewportRotation, setViewportRotation } from "./rotate.js";
+import type { AppConfig } from "./types.js";
 
 const PATH_SELECTOR = "#racing_line path";
-const BASE_LAP_MS = 120000; // wall-clock for one loop at 1x (a ~2 min lap)
-const SPEEDS = [0.25, 0.5, 1] as const;
-const DEFAULT_SPEED_INDEX = 2; // 1x
+const PATH_SAMPLES = 2048;
+const SAMPLE_START_MS = 1000; // let the first tiles load before sampling the line
+const SAMPLE_CHUNK_MS = 8;
+const SPEEDS = [0.25, 0.5, 0.75, 1] as const;
+const DEFAULT_SPEED_INDEX = 3; // 1x
 const SCRUB_MAX = 1000; // integer resolution of the range input
-// Flip to true for constant-speed motion (overrides the config profile).
-const USE_LINEAR = false;
 // Curvature auto-profile (fallback when config has no speedPoints).
 const PROFILE_OPTS = { minSpeed: 0.15, maxSpeed: 1, smoothing: 15 };
-// Show the live path position (u = 0..1) in the bar - set config speedPoints / startOffset by it.
-const SHOW_POS = true;
+// Heading half-windows: short for the car sprite, long for the camera so kinks in the drawn line don't twitch the map.
+const CAR_HEADING_M = 3;
+const CAM_HEADING_M = 20;
+const ASSUMED_TRACK_M = 4000; // scale guess when config has no trackLengthM
+const GLIDE_TAU_S = 0.18;
+const ROTATE_TAU_S = 0.4; // heading-up easing in
+const EDGE_PX = 32; // while playing, the car stays at least this far inside the visible area
+const BAR_GAP_PX = 8;
 
 // Replay: a fast-forward (double triangle) inside a counter-clockwise loop.
 const REPLAY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26" height="26" aria-hidden="true"><path d="M2.5 12a9.5 9.5 0 1 0 9.5-9.5 10.3 10.3 0 0 0-7.1 2.9L2.5 7.7"/><path d="M2.5 2.5v5.2h5.2"/><path d="M6.7 7.7 12 12 6.7 16.3Z" fill="currentColor" stroke="none"/><path d="M12 7.7 17.3 12 12 16.3Z" fill="currentColor" stroke="none"/></svg>`;
 const PLAY_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const PAUSE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
-const ORIENT_ICON = `<svg viewBox="0 0 56 56" width="24" height="24" fill="currentColor" aria-hidden="true"><path d="M 7.8086 50.3477 L 48.1914 50.3477 C 53.0663 50.3477 55.5508 47.9102 55.5508 43.0820 L 55.5508 18.5430 C 55.5508 13.7149 53.0663 11.3008 48.1914 11.3008 L 42.7069 11.3008 C 40.8789 11.3008 40.3164 10.9258 39.2617 9.7539 L 37.3633 7.6445 C 36.2149 6.3555 35.0196 5.6523 32.5820 5.6523 L 23.2539 5.6523 C 20.8398 5.6523 19.6445 6.3555 18.4727 7.6445 L 16.5742 9.7539 C 15.5430 10.9023 14.9571 11.3008 13.1289 11.3008 L 7.8086 11.3008 C 2.9336 11.3008 .4492 13.7149 .4492 18.5430 L .4492 43.0820 C .4492 47.9102 2.9336 50.3477 7.8086 50.3477 Z M 7.8789 46.5742 C 5.5586 46.5742 4.2227 45.3320 4.2227 42.8945 L 4.2227 18.7539 C 4.2227 16.3164 5.5586 15.0742 7.8789 15.0742 L 14.0664 15.0742 C 16.1758 15.0742 17.3008 14.6758 18.4727 13.3633 L 20.3242 11.3008 C 21.6602 9.8008 22.3398 9.4258 24.4258 9.4258 L 31.4102 9.4258 C 33.4961 9.4258 34.1758 9.8008 35.5117 11.3008 L 37.3633 13.3633 C 38.5352 14.6758 39.6602 15.0742 41.7696 15.0742 L 48.1213 15.0742 C 50.4416 15.0742 51.7775 16.3164 51.7775 18.7539 L 51.7775 42.8945 C 51.7775 45.3320 50.4416 46.5742 48.1213 46.5742 Z M 28.0117 16.6914 C 25.1992 16.6914 22.3164 17.6992 20.3711 19.3398 C 19.2930 20.1836 19.0117 21.3555 19.8086 22.1992 C 20.6055 23.0430 21.6367 22.9258 22.5039 22.2461 C 24.1445 20.9336 25.8086 20.2773 28.0117 20.2773 C 32.5586 20.2773 36.3320 23.3476 37.3398 27.3555 L 34.7852 27.3555 C 33.7305 27.3555 33.4727 28.3633 34.0820 29.1602 L 37.7617 34.2930 C 38.3711 35.1367 39.4258 35.2071 40.0586 34.2930 L 43.6914 29.1602 C 44.2775 28.3398 44.0428 27.3555 42.9882 27.3555 L 40.7149 27.3555 C 39.6133 21.0508 34.5039 16.6914 28.0117 16.6914 Z M 12.9414 31.4805 L 15.3555 31.4805 C 16.4805 37.7852 21.5898 42.1445 28.0586 42.1445 C 30.8945 42.1445 33.7305 41.1602 35.7227 39.5195 C 36.8008 38.6758 37.0820 37.4805 36.2852 36.6367 C 35.4883 35.7930 34.4571 35.9336 33.5430 36.5898 C 31.9024 37.8789 30.2617 38.5820 28.0586 38.5820 C 23.5352 38.5820 19.7383 35.5117 18.7539 31.4805 L 21.1680 31.4805 C 22.1992 31.4805 22.4805 30.4961 21.8711 29.6758 L 18.1914 24.5664 C 17.5820 23.7227 16.5274 23.6523 15.8945 24.5664 L 12.2617 29.6758 C 11.6758 30.4961 11.9102 31.4805 12.9414 31.4805 Z"/></svg>`;
+const FOLLOW_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>`;
+const ORIENT_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2 4.5 20.3l.7.7L12 18l6.8 3 .7-.7z"/></svg>`;
 
 export interface ReplayApi {
 	/** Show/hide the replay FAB and enable/disable the tool (Options checkbox). */
 	setEnabled: (on: boolean) => void;
 }
 
+/** Car screen spot as fractions of the visible map area (above the replay bar). */
+interface Anchor {
+	fx: number;
+	fy: number;
+}
+
+// OSD 4 viewport internals the camera needs (@types/openseadragon is 3.x).
+interface SpringInternals {
+	shiftBy(delta: number): void;
+	current: { value: number };
+}
+interface ViewportInternals {
+	centerSpringX: SpringInternals;
+	centerSpringY: SpringInternals;
+	zoomPoint: OpenSeadragon.Point | null;
+	update(): boolean;
+}
+
+const normalizeDeg = (d: number): number => (((d % 360) + 540) % 360) - 180;
+
 /**
- * Lap replay: a car marker drives the racing line, with a bottom playback bar
- * (play/pause, scrubber, speed). The car lives in the overlay SVG so it pans,
- * zooms and rotates with the map. Toggled by a mini-FAB satellite; nothing persists.
+ * Lap replay: a car marker drives the racing line in real time, with a bottom
+ * playback bar (play/pause, scrubber, rate, camera toggles). The car lives in the
+ * overlay SVG so it pans, zooms and rotates with the map. Nothing persists.
+ *
+ * Camera, Follow mode: every frame the view moves by the car's own travel, so the
+ * car keeps whatever screen spot and zoom the user leaves it at (drag it, pinch,
+ * wheel), but can't be pushed out of view while playing. Paused, the map is free.
+ * Fixed leaves the camera alone. Heading-up rotates the map about the car so it points up.
+ * Speed and lap time are never shown (authoring data only).
  */
 export function initReplay(
 	viewer: OpenSeadragon.Viewer,
 	svgEl: SVGSVGElement,
 	fab: FabResult,
 	closePanel: () => void,
-	cfg: ReplayConfig = {},
+	cfg: AppConfig,
+	isStroking: () => boolean,
+	setRotationPivot: (pivot: (() => OpenSeadragon.Point | null) | null) => void,
 ): ReplayApi {
-	// Follow cam: pan the view to keep the car centred.
-	const follow = cfg.follow !== false; // default on
-	const initialZoom = cfg.initialZoom ?? cfg.followZoom ?? 5; // zoom applied when replay starts
-	// Follow smoothing: 0 = locked to the car (crisper but jitterier), higher = smoother.
-	const followEase = Math.min(1, Math.max(0.08, 1 - (cfg.followSmoothing ?? 0.4)));
-	// Orient (chase-cam) smoothing - rotation is jerkier, so smooth it harder by default.
-	const orientEase = Math.min(1, Math.max(0.05, 1 - (cfg.orientSmoothing ?? 0.7)));
-	// Shift the look-at ahead of the car so more of the track ahead is visible.
-	const lookAhead = Math.min(0.45, Math.max(0, cfg.lookAhead ?? 0.25));
+	const rc = cfg.replay ?? {};
+	const reverse = rc.reverse === true;
+	// Config positions are along the path `d`; the sampler runs in travel order.
+	const toTravelU = (u: number): number => (reverse ? wrap01(1 - u) : wrap01(u));
+	const trackM = cfg.trackLengthM && cfg.trackLengthM > 0 ? cfg.trackLengthM : undefined;
+	const viewSpanM = rc.viewSpanM ?? 170;
+	const lookAhead = Math.min(0.4, Math.max(0, rc.lookAhead ?? 0.25));
+	const vp = viewer.viewport;
+	const vpi = vp as unknown as ViewportInternals;
 
 	// Engine (built once the overlay is attached + measurable).
+	let sampling: PathSampling | null = null;
 	let sampler: PathSampler | null = null;
 	let timeline: LapTimeline | null = null;
 	let car: SVGGElement | null = null;
+	let pxPerM = 1;
 
 	// Runtime state.
 	let enabled = false;
@@ -67,10 +100,24 @@ export function initReplay(
 	let playing = false;
 	let progress = 0; // normalized time in [0,1)
 	let speedIndex = DEFAULT_SPEED_INDEX;
-	let rafId: number | null = null;
-	let lastTs = 0;
 	let userScrubbing = false;
-	let orient = cfg.followOrient === true; // chase-cam rotation (toggled live from the bar)
+	let lastTs = performance.now();
+	let prevDist = 0; // where the car was drawn last frame
+	let dirty = false; // redraw the car even if it didn't move
+
+	// Camera state.
+	let follow = rc.follow !== false;
+	let headingUp = rc.followOrient === true;
+	const anchor: Anchor = { fx: 0.5, fy: 0.5 }; // framing Follow returns to
+	let followZoom: number | null = null; // zoom to return to when Follow comes back on
+	let glide = false; // easing the car toward its anchor
+	let snap = false; // next frame jumps instead of easing (activation, scrub)
+	let rotOffset = 0; // heading-up: decaying gap between the shown and the true heading (deg)
+	let trackZoomPoint = false; // our zoom animation should stay centred on the moving car
+	let selfRotating = false;
+	let strokeHold: OpenSeadragon.Point | null = null; // car's screen spot when a draw stroke began
+	let visibleW = 1;
+	let visibleH = 1;
 
 	// Car FAB satellite (stacks under draw/compass).
 	const btn = document.createElement("button");
@@ -90,7 +137,14 @@ export function initReplay(
 		<div class="replay-row">
 			<button class="replay-btn replay-speed" data-i18n-aria="replaySpeed">1x</button>
 			<button class="replay-btn replay-play" data-i18n-aria="replayPlay">${PLAY_ICON}</button>
-			<button class="replay-btn replay-orient" data-i18n-aria="replayOrient">${ORIENT_ICON}</button>
+			<label class="replay-ctl">
+				<button class="replay-btn replay-toggle replay-follow" data-i18n-aria="replayFollow">${FOLLOW_ICON}</button>
+				<span class="replay-label" data-i18n="replayFollowLabel" aria-hidden="true"></span>
+			</label>
+			<label class="replay-ctl">
+				<button class="replay-btn replay-toggle replay-orient" data-i18n-aria="replayOrient">${ORIENT_ICON}</button>
+				<span class="replay-label" data-i18n="replayOrientLabel" aria-hidden="true"></span>
+			</label>
 		</div>
 		<input class="replay-scrubber" type="range" min="0" max="${SCRUB_MAX}" value="0" step="1" data-i18n-aria="replayScrub" />
 	`;
@@ -98,118 +152,226 @@ export function initReplay(
 
 	const playBtn = bar.querySelector<HTMLButtonElement>(".replay-play")!;
 	const scrubber = bar.querySelector<HTMLInputElement>(".replay-scrubber")!;
+	const followBtn = bar.querySelector<HTMLButtonElement>(".replay-follow")!;
 	const orientBtn = bar.querySelector<HTMLButtonElement>(".replay-orient")!;
 	const speedBtn = bar.querySelector<HTMLButtonElement>(".replay-speed")!;
 	speedBtn.textContent = `${SPEEDS[speedIndex]}x`;
-	orientBtn.classList.toggle("active", orient);
+	syncToggles();
 
-	// Authoring aid: live path position readout above the bar (see SHOW_POS).
-	const posEl = document.createElement("div");
-	posEl.className = "replay-pos";
-	posEl.hidden = true;
-	document.body.appendChild(posEl);
+	function syncToggles(): void {
+		followBtn.classList.toggle("active", follow);
+		followBtn.setAttribute("aria-pressed", String(follow));
+		orientBtn.classList.toggle("active", headingUp);
+		orientBtn.setAttribute("aria-pressed", String(headingUp));
+		orientBtn.disabled = !follow;
+	}
 
-	// Build the sampler + timeline once; the path geometry and CTM never change.
-	function buildEngine(): boolean {
-		if (sampler && timeline) return true;
-		if (viewer.world.getItemCount() === 0) return false; // overlay not measurable yet
-		const path = svgEl.querySelector<SVGPathElement>(PATH_SELECTOR);
-		if (!path) return false;
+	function findPath(): SVGPathElement | null {
+		return svgEl.querySelector<SVGPathElement>(PATH_SELECTOR);
+	}
+
+	function startSampling(): boolean {
+		if (sampling) return true;
+		const path = findPath();
+		if (!path || viewer.world.getItemCount() === 0) return false;
 		try {
-			sampler = createPathSampler(path, { reverse: cfg.reverse });
+			sampling = samplePath(path, PATH_SAMPLES, reverse);
 		} catch {
-			sampler = null;
-			return false;
-		}
-		const startOffset = cfg.startOffset ?? 0;
-		const pts = cfg.speedPoints;
-		if (USE_LINEAR) {
-			timeline = createLinearTimeline(sampler.total, startOffset);
-		} else if (pts && pts.length > 0) {
-			timeline = createManualTimeline(sampler, { startOffset, speedPoints: pts });
-		} else {
-			timeline = createProfileTimeline(sampler, { ...PROFILE_OPTS, startOffset });
+			return false; // overlay not laid out yet
 		}
 		return true;
 	}
 
-	// Centre the view on the car. `immediate` snaps (scrub/activate); playback eases
-	// toward the car to absorb frame-timing jitter (worse the further you zoom in).
-	function followCar(dist: number, immediate: boolean): void {
-		if (!sampler) return;
-		const p = sampler.pointAt(dist);
-		let target = viewer.viewport.imageToViewportCoordinates(new OpenSeadragon.Point(p.x, p.y));
-		// Push the look-at point ahead of the car (along its heading) so the car rides
-		// toward the back of the view and more of the upcoming track is on screen.
-		if (lookAhead > 0) {
-			const rad = (sampler.headingDeg(dist) * Math.PI) / 180;
-			const cs = viewer.viewport.getContainerSize();
-			const spanY = cs.x > 0 ? cs.y / cs.x / viewer.viewport.getZoom(true) : 0; // visible height, viewport units
-			const lead = lookAhead * spanY;
-			target = new OpenSeadragon.Point(target.x + Math.cos(rad) * lead, target.y + Math.sin(rad) * lead);
-		}
-		if (immediate || followEase >= 1) {
-			viewer.viewport.panTo(target, true);
+	// Sample the line in idle time after the tiles open, so startup never blocks and a
+	// later first tap has nothing left to do.
+	const whenIdle = (cb: (budgetMs: number) => void): void => {
+		if ("requestIdleCallback" in window) requestIdleCallback((d) => cb(Math.max(1, d.timeRemaining())));
+		else setTimeout(() => cb(SAMPLE_CHUNK_MS), 16);
+	};
+	function pumpSampling(budgetMs = SAMPLE_CHUNK_MS): void {
+		if (sampler || !findPath()) return;
+		if (!startSampling()) {
+			setTimeout(pumpSampling, 250);
 			return;
 		}
-		const c = viewer.viewport.getCenter(true);
-		const nx = c.x + (target.x - c.x) * followEase;
-		const ny = c.y + (target.y - c.y) * followEase;
-		viewer.viewport.panTo(new OpenSeadragon.Point(nx, ny), true);
+		if (!sampling!.advance(budgetMs)) whenIdle(pumpSampling);
 	}
 
-	// Rotate the view so the car's heading points up. If it ends up backwards for this
-	// map, flip the sign of the -90 term (or add 180).
-	function orientCar(dist: number, immediate: boolean): void {
-		if (!sampler) return;
-		const target = -90 - sampler.headingDeg(dist);
-		const cur = viewer.viewport.getRotation(true);
-		let delta = ((((target - cur) % 360) + 540) % 360) - 180; // shortest path -> (-180, 180]
-		if (!immediate) delta *= orientEase;
-		viewer.viewport.setRotation(cur + delta, true);
+	function buildEngine(): boolean {
+		if (sampler && timeline) return true;
+		if (!startSampling()) return false;
+		sampling!.advance(Infinity);
+		sampler = createPolylineSampler(sampling!.points);
+		pxPerM = sampler.total / (trackM ?? ASSUMED_TRACK_M);
+		const startOffset = toTravelU(rc.startOffset ?? 0);
+		const pts = (rc.speedPoints ?? []).filter((p) => Number.isFinite(p.u) && Number.isFinite(p.kmh));
+		if (pts.length < (rc.speedPoints?.length ?? 0)) {
+			console.warn("replay: ignoring speedPoints without a numeric u/kmh (old {u, speed} format?)");
+		}
+		timeline =
+			pts.length > 0
+				? createManualTimeline(sampler, {
+						startOffset,
+						trackLengthM: trackM,
+						speedPoints: pts.map((p) => ({ u: toTravelU(p.u), kmh: p.kmh })),
+					})
+				: createProfileTimeline(sampler, { ...PROFILE_OPTS, startOffset });
+		return true;
 	}
 
-	// Zoom to the initial zoom (only when entering replay mode); no-op if already there.
-	function snapZoom(): void {
-		if (follow && Math.abs(viewer.viewport.getZoom() - initialZoom) > 1e-3) {
-			viewer.viewport.zoomTo(initialZoom);
+	function carViewportPoint(dist: number): OpenSeadragon.Point {
+		const p = sampler!.pointAt(dist);
+		return vp.imageToViewportCoordinates(new OpenSeadragon.Point(p.x, p.y));
+	}
+
+	function carPixel(): OpenSeadragon.Point {
+		return vp.pixelFromPoint(carViewportPoint(prevDist), true);
+	}
+
+	// The map area the car can use: the container minus the replay bar at its bottom.
+	function measureVisible(): void {
+		const size = vp.getContainerSize();
+		visibleW = size.x;
+		visibleH = size.y;
+		if (!bar.hidden) {
+			const barTop = bar.getBoundingClientRect().top - viewer.container.getBoundingClientRect().top;
+			visibleH = Math.max(80, Math.min(size.y, barTop - BAR_GAP_PX));
 		}
 	}
 
-	function render(immediate = false): void {
-		if (!sampler || !timeline || !car) return;
-		const dist = timeline.distanceAt(progress);
-		positionCar(car, sampler, dist);
-		if (follow) followCar(dist, immediate);
-		if (orient) orientCar(dist, immediate);
-		if (SHOW_POS) posEl.textContent = `u ${(dist / sampler.total).toFixed(3)}`;
-		if (!userScrubbing) scrubber.value = String(Math.round(progress * SCRUB_MAX));
+	function isVisible(p: OpenSeadragon.Point): boolean {
+		return p.x >= EDGE_PX && p.x <= visibleW - EDGE_PX && p.y >= EDGE_PX && p.y <= visibleH - EDGE_PX;
 	}
 
-	function frame(ts: number): void {
-		if (!playing) return;
-		const dt = Math.min(50, ts - lastTs); // clamp to swallow frame-timing spikes (tab defocus, GC)
-		lastTs = ts;
-		// Hold progress while the user drags the scrubber; resume from there on release.
-		if (!userScrubbing && timeline) {
-			progress += (dt / BASE_LAP_MS) * SPEEDS[speedIndex];
+	function clampToVisible(p: OpenSeadragon.Point): OpenSeadragon.Point {
+		const clamp = (v: number, size: number): number =>
+			Math.min(Math.max(v, EDGE_PX), Math.max(EDGE_PX, size - EDGE_PX));
+		return new OpenSeadragon.Point(clamp(p.x, visibleW), clamp(p.y, visibleH));
+	}
+
+	// Centred; with heading-up, lower down so more of the track ahead shows.
+	function recenterAnchor(): void {
+		anchor.fx = 0.5;
+		anchor.fy = headingUp ? 0.5 + lookAhead : 0.5;
+	}
+
+	// Remember a screen spot (default: the car's) as the framing, if it's on screen.
+	function saveAnchor(p = carPixel()): void {
+		if (!isVisible(p)) return;
+		anchor.fx = p.x / visibleW;
+		anchor.fy = p.y / visibleH;
+	}
+
+	// OSD zoom that fits viewSpanM meters across the visible area's short side.
+	function spanZoom(): number {
+		return vp.imageToViewportZoom(Math.min(visibleW, visibleH) / (viewSpanM * pxPerM));
+	}
+
+	// Zoom about the car; the per-frame hook keeps the zoom point on the car while it moves.
+	function zoomOnCar(target: number): void {
+		// Clamped here: our own zoomTo skips OSD's scroll-zoom constraints.
+		const zoom = Math.min(vp.getMaxZoom(), Math.max(vp.getMinZoom(), target));
+		if (Math.abs(vp.getZoom() / zoom - 1) < 0.01) return;
+		vp.zoomTo(zoom, carViewportPoint(prevDist));
+		trackZoomPoint = true;
+	}
+
+	function headingTarget(dist: number): number {
+		return -90 - sampler!.headingDeg(dist, CAM_HEADING_M * pxPerM);
+	}
+
+	function rotateTo(deg: number, immediately: boolean): void {
+		selfRotating = true;
+		setViewportRotation(vp, deg, immediately);
+		selfRotating = false;
+	}
+
+	// Move the view so the car sits where it was drawn last frame (as the user may since
+	// have dragged/zoomed it), easing toward its anchor during a glide. Returns true if the view moved.
+	function updateCamera(dist: number, dt: number): boolean {
+		// Where last frame's car is now, after this frame's user input and OSD animation.
+		let p = carPixel();
+		let moved = false;
+
+		if (headingUp) {
+			rotOffset = snap ? 0 : rotOffset * Math.exp(-dt / ROTATE_TAU_S);
+			if (Math.abs(rotOffset) < 0.1) rotOffset = 0;
+			const deg = normalizeDeg(headingTarget(dist) + rotOffset);
+			if (deg !== getViewportRotation(vp)) {
+				rotateTo(deg, true);
+				moved = true;
+			}
+		}
+
+		if (snap && !isVisible(p)) glide = true;
+		if (glide) {
+			const dx = anchor.fx * visibleW - p.x;
+			const dy = anchor.fy * visibleH - p.y;
+			const k = snap || Math.hypot(dx, dy) < 0.5 ? 1 : 1 - Math.exp(-dt / GLIDE_TAU_S);
+			if (k === 1) glide = false;
+			p = new OpenSeadragon.Point(p.x + dx * k, p.y + dy * k);
+		} else if (playing) {
+			// A drag or pinch can move the car on screen but never push it out of view.
+			p = clampToVisible(p);
+		}
+
+		// Shift start/current/target together so a pan the user or OSD has in flight
+		// (mouse drag easing, touch flick) carries on instead of being cancelled.
+		const shown = vp.pointFromPixel(p, true);
+		const car = carViewportPoint(dist);
+		const dx = car.x - shown.x;
+		const dy = car.y - shown.y;
+		if (dx !== 0 || dy !== 0) {
+			for (const [spring, d] of [
+				[vpi.centerSpringX, dx],
+				[vpi.centerSpringY, dy],
+			] as const) {
+				spring.shiftBy(d);
+				spring.current.value += d;
+			}
+			moved = true;
+		}
+		return moved;
+	}
+
+	// One replay frame, run inside OSD's own frame (after its springs update, before it
+	// draws), so the car and the camera never lag the tiles by a frame. True = redraw.
+	function step(): boolean {
+		const now = performance.now();
+		let dt = (now - lastTs) / 1000;
+		lastTs = now;
+		if (!active || !sampler || !timeline || !car) return false;
+		if (dt > 0.25) dt = 1 / 60; // back from a hidden tab: don't jump the car
+
+		if (playing && !userScrubbing) {
+			progress += ((dt * 1000) / timeline.lapMs) * SPEEDS[speedIndex];
 			progress -= Math.floor(progress); // wrap/loop into [0,1)
 		}
-		render();
-		rafId = requestAnimationFrame(frame);
-	}
-
-	function startLoop(): void {
-		if (rafId !== null) return;
-		lastTs = performance.now();
-		rafId = requestAnimationFrame(frame);
-	}
-
-	function stopLoop(): void {
-		if (rafId !== null) {
-			cancelAnimationFrame(rafId);
-			rafId = null;
+		const dist = timeline.distanceAt(progress);
+		let changed = false;
+		if (dist !== prevDist || dirty) {
+			positionCar(car, sampler, dist, CAR_HEADING_M * pxPerM);
+			changed = true;
 		}
+		// A stroke in progress needs the map still under the pen; afterwards the car glides back.
+		if (follow && isStroking()) {
+			strokeHold ??= carPixel();
+		} else if (follow) {
+			if (strokeHold) {
+				saveAnchor(strokeHold);
+				strokeHold = null;
+				glide = true;
+			}
+			changed = updateCamera(dist, dt) || changed;
+		}
+		prevDist = dist;
+		dirty = false;
+		snap = false;
+		if (!userScrubbing) {
+			const v = String(Math.round(progress * SCRUB_MAX));
+			if (scrubber.value !== v) scrubber.value = v;
+		}
+		return changed;
 	}
 
 	function setPlaying(on: boolean): void {
@@ -218,14 +380,41 @@ export function initReplay(
 		playBtn.innerHTML = on ? PAUSE_ICON : PLAY_ICON;
 		playBtn.setAttribute("data-i18n-aria", on ? "replayPause" : "replayPlay");
 		playBtn.setAttribute("aria-label", t(on ? "replayPause" : "replayPlay"));
+		// Looked away while paused: bring the car back into view.
+		if (on && follow && !isVisible(carPixel())) glide = true;
+	}
+
+	function setFollow(on: boolean): void {
+		if (on === follow) return;
+		follow = on;
+		syncToggles();
+		if (!active) return;
 		if (on) {
-			startLoop(); // resume keeps the current zoom; the loop re-centres
+			recenterAnchor();
+			glide = true;
+			if (headingUp) rotOffset = normalizeDeg(getViewportRotation(vp) - headingTarget(prevDist));
+			zoomOnCar(followZoom ?? spanZoom());
 		} else {
-			stopLoop();
+			glide = false;
+			trackZoomPoint = false;
+			followZoom = vp.getZoom();
 		}
 	}
 
-	// Show the bar + spawn the car (paused), or tear both down.
+	// Off leaves the map and car where they are; on eases into the heading and re-centres the car.
+	function setHeadingUp(on: boolean): void {
+		if (on === headingUp) return;
+		headingUp = on;
+		syncToggles();
+		rotOffset = 0;
+		if (on && active && follow) {
+			rotOffset = normalizeDeg(getViewportRotation(vp) - headingTarget(prevDist));
+			recenterAnchor();
+			glide = true;
+		}
+	}
+
+	// Show the bar + spawn the car (paused), or tear both down (the view stays where it is).
 	function setActive(on: boolean): void {
 		if (on && !enabled) return;
 		if (on) {
@@ -234,16 +423,26 @@ export function initReplay(
 			if (!car) car = createCarElement();
 			svgEl.appendChild(car); // last child = drawn on top of the layers
 			bar.hidden = false;
-			posEl.hidden = !SHOW_POS;
+			measureVisible();
 			active = true;
-			snapZoom(); // only entering replay mode zooms in
-			render(true); // snap-centre on the car
+			prevDist = timeline!.distanceAt(progress);
+			dirty = true;
+			follow = rc.follow !== false; // every opening starts in the configured mode
+			syncToggles();
+			if (follow) {
+				recenterAnchor();
+				glide = true;
+				snap = true;
+				zoomOnCar(followZoom ?? spanZoom());
+			}
+			viewer.forceRedraw();
 		} else {
 			setPlaying(false);
 			bar.hidden = true;
-			posEl.hidden = true;
 			active = false;
-			if (orient) viewer.viewport.setRotation(0); // straighten the map on exit
+			glide = false;
+			trackZoomPoint = false;
+			strokeHold = null;
 			if (car?.parentNode) car.parentNode.removeChild(car);
 		}
 		btn.classList.toggle("active", active);
@@ -257,13 +456,8 @@ export function initReplay(
 		speedBtn.textContent = `${SPEEDS[speedIndex]}x`; // rate change only, no positional jump
 	});
 
-	// Toggle chase-cam orientation live.
-	orientBtn.addEventListener("click", () => {
-		orient = !orient;
-		orientBtn.classList.toggle("active", orient);
-		if (orient) render(true); // snap to heading-up now
-		else viewer.viewport.setRotation(0); // straighten (animated)
-	});
+	followBtn.addEventListener("click", () => setFollow(!follow));
+	orientBtn.addEventListener("click", () => setHeadingUp(!headingUp));
 
 	// Scrubbing: drive progress from the slider, reposition immediately (paused or playing).
 	scrubber.addEventListener("pointerdown", () => {
@@ -276,17 +470,70 @@ export function initReplay(
 	scrubber.addEventListener("pointercancel", endScrub);
 	scrubber.addEventListener("input", () => {
 		progress = Number(scrubber.value) / SCRUB_MAX;
-		if (buildEngine()) render(true); // snap to the scrubbed spot, keep current zoom
+		snap = true;
+		dirty = true;
+		viewer.forceRedraw();
 	});
 
-	// Dragging (panning) the map pauses playback so you can look around; zooming does not.
-	viewer.addHandler("canvas-drag", () => {
-		if (playing) setPlaying(false);
+	function aimZoomPoint(): boolean {
+		if (!trackZoomPoint) return false;
+		// OSD's zoom spring can settle a rounding error short of its target and then never clears zoomPoint.
+		const settled = Math.abs(vp.getZoom(true) / vp.getZoom() - 1) < 1e-9;
+		if (vpi.zoomPoint && sampler && !settled) vpi.zoomPoint = carViewportPoint(prevDist);
+		else trackZoomPoint = false;
+		return false;
+	}
+
+	// A throw inside OSD's update would stop its render loop for good: drop the replay instead.
+	function guarded(fn: () => boolean): boolean {
+		try {
+			return fn();
+		} catch (err) {
+			console.error("replay:", err);
+			active = false;
+			setTimeout(() => setActive(false), 0);
+			return false;
+		}
+	}
+
+	// Run the replay frame inside OSD's frame (see step).
+	const osdUpdate = vpi.update.bind(vp);
+	vpi.update = (): boolean => {
+		guarded(aimZoomPoint);
+		const changed = osdUpdate();
+		return guarded(step) || changed;
+	};
+
+	// Following while playing: the wheel zooms about the car, not the cursor, so it stays framed.
+	viewer.addHandler("canvas-scroll", (e) => {
+		if (!active || !follow || !playing || !sampler) return;
+		e.preventDefaultAction = true;
+		const perScroll = (viewer as unknown as { zoomPerScroll: number }).zoomPerScroll;
+		zoomOnCar(vp.getZoom() * Math.pow(perScroll, e.scroll));
 	});
 
-	// Build the engine as soon as the tiles open so the first tap is instant.
+	// Someone else rotated the map (compass tap, twist): heading-up hands the rotation over.
+	viewer.addHandler("rotate", () => {
+		if (selfRotating || !active || !follow || !headingUp) return;
+		setHeadingUp(false);
+	});
+
+	// Following a moving car, a manual twist/right-drag turns the map about the car instead of
+	// the screen centre (which would swing the car off its spot). Paused, rotation stays free.
+	setRotationPivot(() => {
+		if (!active || !follow || !playing || !sampler) return null;
+		const p = carPixel();
+		return isVisible(p) ? p : null;
+	});
+
+	viewer.addHandler("resize", () => {
+		if (!active) return;
+		measureVisible();
+		if (follow) glide = true;
+	});
+
 	viewer.addHandler("open", () => {
-		buildEngine();
+		setTimeout(pumpSampling, SAMPLE_START_MS);
 	});
 
 	return {

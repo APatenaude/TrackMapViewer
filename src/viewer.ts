@@ -1,5 +1,5 @@
 import OpenSeadragon from "openseadragon";
-import { initRotate, setViewportRotation } from "./rotate.js";
+import { initRotate, setViewportRotation, type RotateController } from "./rotate.js";
 import { initUpright } from "./upright.js";
 import type { AppConfig, PersistedState } from "./types.js";
 
@@ -8,6 +8,8 @@ export interface ViewerResult {
 	svgEl: SVGSVGElement;
 	/** Enable/disable the rotation gestures (compass long-press lock). */
 	setRotationLocked: (locked: boolean) => void;
+	/** Rotation gestures pivot on this container pixel when it returns one (see rotate.ts setPivot). */
+	setRotationPivot: RotateController["setPivot"];
 }
 
 export function initViewer(
@@ -113,5 +115,5 @@ export function initViewer(
 		onViewChange(center.x, center.y, viewer.viewport.getZoom(), rotation);
 	});
 
-	return { viewer, svgEl, setRotationLocked: rotate.setLocked };
+	return { viewer, svgEl, setRotationLocked: rotate.setLocked, setRotationPivot: rotate.setPivot };
 }

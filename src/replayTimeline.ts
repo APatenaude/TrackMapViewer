@@ -1,26 +1,24 @@
 import type { PathSampler } from "./replayPath.js";
+import type { ReplaySpeedPoint } from "./types.js";
+
+/** Lap length at 1x when speeds have no real scale (no track length, or the curvature fallback). */
+export const RELATIVE_LAP_MS = 120000;
 
 /**
  * Maps normalized playback time (tNorm in [0,1]) to a path arc-length distance in
- * [0, total]. Linear, curvature-profile and manual modes all implement this, so
- * the controller can swap between them without other changes. `startOffset`
- * (path-normalized) shifts where the lap begins on the path.
+ * [0, total). Curvature-profile and manual modes both implement this, so the
+ * controller can swap between them without other changes. `startOffset`
+ * (path-normalized, travel direction) shifts where the lap begins on the path.
  */
 export interface LapTimeline {
 	readonly total: number;
+	/** Wall-clock length of one lap at 1x, in ms. */
+	readonly lapMs: number;
 	distanceAt(tNorm: number): number;
 }
 
-/** A manual speed control point: relative speed at a path position. */
-export interface SpeedPoint {
-	/** Path-normalized position in [0,1] (0 = start of the path `d`). */
-	u: number;
-	/** Relative speed factor (> 0); bigger = faster. */
-	speed: number;
-}
-
 export interface SpeedProfileOptions {
-	/** Path-normalized position [0,1] where the lap starts. */
+	/** Position [0,1] along the travel direction where the lap starts. */
 	startOffset?: number;
 	/** Number of samples taken along the path to build the profile. */
 	samples?: number;
@@ -33,23 +31,24 @@ export interface SpeedProfileOptions {
 }
 
 export interface ManualProfileOptions {
-	/** Path-normalized position [0,1] where the lap starts. */
+	/** Position [0,1] along the travel direction where the lap starts. */
 	startOffset?: number;
-	/** Control points (interpolated + wrapped around the loop). */
-	speedPoints: SpeedPoint[];
+	/** Control points in travel order space (interpolated + wrapped around the loop). */
+	speedPoints: ReplaySpeedPoint[];
+	/** Real loop length in meters; without it speeds only shape the motion and the lap lasts RELATIVE_LAP_MS. */
+	trackLengthM?: number;
 	/** Number of samples the interpolated profile is baked into. */
 	samples?: number;
-	/** Optional moving-average window to soften the interpolation. */
-	smoothing?: number;
 }
 
 const FLOOR = 1e-3;
+const MIN_KMH = 5;
 
 function clamp01(t: number): number {
 	return Math.min(1, Math.max(0, t));
 }
 
-function wrap01(u: number): number {
+export function wrap01(u: number): number {
 	return ((u % 1) + 1) % 1;
 }
 
@@ -70,31 +69,32 @@ function smoothWrap(raw: number[], smoothing: number): number[] {
 
 /**
  * Integrate a per-sample speed array (indexed by path position u_i = i/N) into a
- * time -> path-distance timeline, starting the lap at `startOffset`.
+ * time -> path-distance timeline, starting the lap at `startOffset`. With
+ * `sampleM` (meters between samples) speeds are m/s and the lap runs in real
+ * time; without it they are relative and the lap lasts RELATIVE_LAP_MS.
  */
-function buildTimeline(speed: number[], total: number, startOffset: number): LapTimeline {
+function buildTimeline(speed: number[], total: number, startOffset: number, sampleM?: number): LapTimeline {
 	const N = speed.length;
-	const ds = total / N;
-	const s = (((Math.round(startOffset * N) % N) + N) % N); // start sample index
+	const ds = sampleM ?? 1;
+	const s = ((Math.round(startOffset * N) % N) + N) % N; // start sample index
 
-	// Cumulative normalized time around the loop, starting at index s.
+	// Cumulative normalized time around the loop, starting at index s. Each step
+	// assumes constant acceleration between its two samples: dt = 2 ds / (v0 + v1).
 	const tn = new Array<number>(N + 1);
 	let Ttot = 0;
-	for (let k = 0; k < N; k++) Ttot += ds / Math.max(FLOOR, speed[(s + k) % N]);
-	if (Ttot <= 0) {
-		for (let k = 0; k <= N; k++) tn[k] = k / N;
-	} else {
-		let acc = 0;
-		tn[0] = 0;
-		for (let k = 0; k < N; k++) {
-			acc += ds / Math.max(FLOOR, speed[(s + k) % N]);
-			tn[k + 1] = acc / Ttot;
-		}
-		tn[N] = 1;
+	tn[0] = 0;
+	for (let k = 0; k < N; k++) {
+		const v0 = Math.max(FLOOR, speed[(s + k) % N]);
+		const v1 = Math.max(FLOOR, speed[(s + k + 1) % N]);
+		Ttot += (2 * ds) / (v0 + v1);
+		tn[k + 1] = Ttot;
 	}
+	for (let k = 1; k <= N; k++) tn[k] /= Ttot;
+	tn[N] = 1;
 
 	return {
 		total,
+		lapMs: sampleM === undefined ? RELATIVE_LAP_MS : Ttot * 1000,
 		distanceAt(tNorm: number): number {
 			const t = clamp01(tNorm);
 			// First index with tn[j] >= t; bracket is [j-1, j].
@@ -114,20 +114,10 @@ function buildTimeline(speed: number[], total: number, startOffset: number): Lap
 	};
 }
 
-/** Constant-speed timeline: distance is linear in time (lap position == time). */
-export function createLinearTimeline(total: number, startOffset = 0): LapTimeline {
-	const off = wrap01(startOffset);
-	return {
-		total,
-		distanceAt(tNorm: number): number {
-			return wrap01(off + clamp01(tNorm)) * total;
-		},
-	};
-}
-
 /**
  * Curvature-based timeline: samples the path, estimates local radius (tight =
  * slow, straight = fast), smooths the speed, then integrates from `startOffset`.
+ * Speeds are relative, so the lap lasts RELATIVE_LAP_MS.
  */
 export function createProfileTimeline(sampler: PathSampler, opts: SpeedProfileOptions = {}): LapTimeline {
 	const N = opts.samples ?? 400;
@@ -172,49 +162,55 @@ export function createProfileTimeline(sampler: PathSampler, opts: SpeedProfileOp
 	return buildTimeline(smoothWrap(rawSpeed, smoothing), total, startOffset);
 }
 
-/** Speed at a path position by wrap-around linear interpolation of control points. */
-function sampleManualSpeed(points: SpeedPoint[], u: number): number {
+/**
+ * Speed (m/s) at a path position between control points, wrapping across the
+ * u=1 seam. v^2 is linear in distance between two points, i.e. constant
+ * acceleration or braking, so the car brakes and accelerates like a car instead
+ * of easing symmetrically.
+ */
+function sampleManualSpeed(points: ReplaySpeedPoint[], u: number): number {
 	const n = points.length;
 	if (n === 0) return 1;
-	if (n === 1) return points[0].speed;
-	const first = points[0];
-	const last = points[n - 1];
-	// Before the first or after the last point: interpolate across the u=1 seam.
-	if (u < first.u || u >= last.u) {
-		const span = first.u + 1 - last.u;
-		const uu = u < first.u ? u + 1 : u;
-		const t = span > 0 ? clamp01((uu - last.u) / span) : 0;
-		return last.speed + (first.speed - last.speed) * t;
-	}
+	const mps = (p: ReplaySpeedPoint): number => Math.max(FLOOR, p.kmh / 3.6);
+	if (n === 1) return mps(points[0]);
+	let a = points[n - 1];
+	let b = points[0];
+	let span = b.u + 1 - a.u;
+	let t = u >= a.u ? u - a.u : u + 1 - a.u;
 	for (let i = 0; i < n - 1; i++) {
-		const a = points[i];
-		const b = points[i + 1];
-		if (u >= a.u && u <= b.u) {
-			const span = b.u - a.u;
-			const t = span > 0 ? (u - a.u) / span : 0;
-			return a.speed + (b.speed - a.speed) * t;
+		if (u >= points[i].u && u < points[i + 1].u) {
+			a = points[i];
+			b = points[i + 1];
+			span = b.u - a.u;
+			t = u - a.u;
+			break;
 		}
 	}
-	return first.speed;
+	const va = mps(a);
+	const vb = mps(b);
+	const f = span > 0 ? clamp01(t / span) : 0;
+	return Math.sqrt(va * va + (vb * vb - va * va) * f);
 }
 
 /**
- * Manual timeline: interpolate sparse {u, speed} control points into a per-sample
- * speed profile, then integrate from `startOffset`. Author-friendly - set a speed
- * at a few path positions and the rest is filled in.
+ * Manual timeline: interpolate sparse {u, kmh} control points into a per-sample
+ * speed profile, then integrate from `startOffset`. With `trackLengthM`, 1x is
+ * real time.
  */
 export function createManualTimeline(sampler: PathSampler, opts: ManualProfileOptions): LapTimeline {
-	const N = opts.samples ?? 400;
+	const N = opts.samples ?? 2048;
 	const startOffset = opts.startOffset ?? 0;
-	const smoothing = opts.smoothing ?? 0;
 	const total = sampler.total;
 
+	// A 0 km/h point would take forever to leave; two points at one u would step the speed.
 	const pts = opts.speedPoints
-		.map((p) => ({ u: wrap01(p.u), speed: Math.max(FLOOR, p.speed) }))
-		.sort((a, b) => a.u - b.u);
+		.map((p) => ({ u: wrap01(p.u), kmh: Math.max(MIN_KMH, p.kmh) }))
+		.sort((a, b) => a.u - b.u)
+		.filter((p, i, all) => i === 0 || p.u !== all[i - 1].u);
 
-	const raw = new Array<number>(N);
-	for (let i = 0; i < N; i++) raw[i] = sampleManualSpeed(pts, i / N);
+	const speed = new Array<number>(N);
+	for (let i = 0; i < N; i++) speed[i] = sampleManualSpeed(pts, i / N);
 
-	return buildTimeline(smoothWrap(raw, smoothing), total, startOffset);
+	const sampleM = opts.trackLengthM && opts.trackLengthM > 0 ? opts.trackLengthM / N : undefined;
+	return buildTimeline(speed, total, startOffset, sampleM);
 }
