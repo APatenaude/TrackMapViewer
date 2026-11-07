@@ -28,7 +28,11 @@ src/
   trackDoc.ts             # track document types + readTrackDoc (schema version, compat note)
   trackRender.ts          # track document -> overlay <g> groups (same ids the layer toggles use)
   lineGeometry.ts         # line nodes (bezier handles / auto-smooth) -> path data, flattened polylines
-  import/inkscape.ts      # Inkscape SVG -> track document (browser-only; for the phase-3 editor's import)
+  markerIcons.ts          # built-in marker icons (Marker.icon ids), drawn at Tremblant's scale
+  import/inkscape.ts      # Inkscape SVG -> track document (browser-only; converted Tremblant, no UI)
+  editor/                 # /admin track editor (own lazy chunk): ops.ts pure doc edits, anchors.ts,
+                          #   store.ts undo/redo, canvas.ts + interaction.ts map, panel.ts, drafts.ts
+                          #   (IndexedDB), serialize.ts (stable track.json layout), save.ts
   main.ts                 # bootstrap: config, track index, pick track from the URL, init all modules
   viewer.ts               # OSD init + SVG overlay via addOverlay, line switching
   layers.ts               # options panel: track/line pickers, layer visibility/opacity
@@ -49,6 +53,13 @@ src/
 ### Tiling
 - `npm run tiles` (needs libvips on PATH) tiles every `tracks/*/image.*` into `public/tracks/<slug>/tiles-<hash>`; the hash of the image names the folder, so an unchanged image is never re-tiled and cached tiles never go stale. Run it once before `npm run dev`, and after changing an image.
 - Alpine's vips-tools 8.17+ uses `vips dzsave` (not `vips dzi`).
+
+### Track editor (/admin)
+- Edits are immutable ops on the TrackDoc (`editor/ops.ts`); after editing a line, `anchorLine` re-places its braking zone ends and cars at the same segment + curve t so they follow the line.
+- `serializeTrackDoc` must stay byte-identical to prettier's output with every non-empty object expanded (how all committed track.json files are laid out): saving an unchanged track produces no git diff. A hand-collapsed `{ ... }` gets expanded on its first editor save.
+- Drafts autosave to IndexedDB per slug (`new-<time>` for unsaved new tracks, with the photo blob); `/<slug>?draft=<id>` previews one in the viewer.
+- Dev-only save endpoint in vite-tracks.ts (`configureServer`, never in the build): `POST /__editor/save` `{ slug, json, image?, create? }` validates like the build (`create`: refused with 409 if the folder exists), writes `tracks/<slug>/track.json` (+ `image.jpg`, then runs scripts/tiles.mjs); `GET /__editor/ping` returns `canSave`. Loopback, localhost-Host, same-origin requests only (`npm run dev` listens on the LAN).
+- `/admin` is open on every deployment on purpose: a deployed site is static files, so the editor only touches the visitor's own browser (drafts, zip download). Only a git push changes what's published; there is no auth to maintain.
 
 ### OSD SVG Overlay
 `viewer.addOverlay()` **must** be called inside the OSD `"open"` event handler. The overlay's layer groups are created once and refilled on a line switch (layer toggles and upright billboarding keep their elements; `upright.refresh()` re-scans).

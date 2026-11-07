@@ -38,6 +38,11 @@ function handleIn(nodes: LineNode[], i: number, closed: boolean): Vec {
 	return [-t[0], -t[1]];
 }
 
+/** The handles node i is actually drawn with (explicit, mirrored or auto). */
+export function nodeHandles(nodes: LineNode[], i: number, closed = true): { in: Vec; out: Vec } {
+	return { in: handleIn(nodes, i, closed), out: handleOut(nodes, i, closed) };
+}
+
 /** Cubic segments node i -> node i+1; a closed loop adds the last one back to the first. */
 export function lineSegments(nodes: LineNode[], closed = true): Cubic[] {
 	const n = nodes.length;
@@ -82,19 +87,39 @@ export function cubicAt(s: Cubic, t: number): Point {
 	};
 }
 
+/** Split a cubic at parameter t (de Casteljau): the two halves trace exactly the same curve. */
+export function splitCubic(s: Cubic, t: number): [Cubic, Cubic] {
+	const lerp = (a: Point, b: Point): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+	const a = lerp(s.p0, s.c1);
+	const b = lerp(s.c1, s.c2);
+	const c = lerp(s.c2, s.p1);
+	const d = lerp(a, b);
+	const e = lerp(b, c);
+	const f = lerp(d, e);
+	return [
+		{ p0: s.p0, c1: a, c2: d, p1: f },
+		{ p0: f, c1: e, c2: c, p1: s.p1 },
+	];
+}
+
 export interface FlatLine {
 	/** Polyline in node order (a closed loop runs back from the last point to points[0]). */
 	points: Point[];
 	/** Index into `points` where each node sits. */
 	nodeIndex: number[];
+	/** Per point: the segment (= index of its start node) and the curve parameter there. */
+	seg: number[];
+	t: number[];
 }
 
 /** Flatten into a polyline dense enough to sample and project onto. */
 export function flattenLine(nodes: LineNode[], closed = true): FlatLine {
 	const points: Point[] = [];
 	const nodeIndex: number[] = [];
+	const seg: number[] = [];
+	const t: number[] = [];
 	const segs = lineSegments(nodes, closed);
-	for (const s of segs) {
+	segs.forEach((s, i) => {
 		nodeIndex.push(points.length);
 		// Control-polygon length bounds the arc length from above: enough samples, never too few.
 		const poly =
@@ -102,11 +127,17 @@ export function flattenLine(nodes: LineNode[], closed = true): FlatLine {
 			Math.hypot(s.c2.x - s.c1.x, s.c2.y - s.c1.y) +
 			Math.hypot(s.p1.x - s.c2.x, s.p1.y - s.c2.y);
 		const steps = Math.max(2, Math.ceil(poly / FLATTEN_STEP_PX));
-		for (let k = 0; k < steps; k++) points.push(cubicAt(s, k / steps));
-	}
+		for (let k = 0; k < steps; k++) {
+			points.push(cubicAt(s, k / steps));
+			seg.push(i);
+			t.push(k / steps);
+		}
+	});
 	if (!closed && segs.length > 0) {
 		nodeIndex.push(points.length);
 		points.push(segs[segs.length - 1].p1);
+		seg.push(segs.length - 1);
+		t.push(1);
 	}
-	return { points, nodeIndex };
+	return { points, nodeIndex, seg, t };
 }

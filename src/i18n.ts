@@ -258,11 +258,11 @@ export function t(key: string): string {
 
 /**
  * Resolve a LocalizedString for the active (or given) language.
- * Falls back: requested lang → en → raw string.
+ * Falls back: requested lang → en → raw string. A blank translation counts as missing.
  */
 export function pick(value: LocalizedString, lang: Lang = currentLang): string {
 	if (typeof value === "string") return value;
-	return value[lang] ?? value.en ?? Object.values(value)[0] ?? "";
+	return value[lang] || value.en || Object.values(value)[0] || "";
 }
 
 export function initI18n(lang: Lang): void {

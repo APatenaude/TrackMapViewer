@@ -14,22 +14,27 @@ import "./style.css";
 import "./theme.css";
 import { readTrackDoc, type RacingLine, type TrackDoc, type TrackIndexEntry } from "./trackDoc.js";
 import type { AppConfig, PersistedState } from "./types.js";
-import { initViewer } from "./viewer.js";
+import { initViewer, type TileSource } from "./viewer.js";
 
 // Share links and QR codes from before tracks had their own URLs (/?s=...) were all Tremblant.
 const LEGACY_TRACK = "tremblant";
+
+/** First path segment, lowercased ("" for the bare URL or a malformed one). */
+function firstSegment(): string {
+	const raw = location.pathname.split("/").filter(Boolean)[0] ?? "";
+	try {
+		const segment = decodeURIComponent(raw).toLowerCase();
+		return segment === "index.html" ? "" : segment;
+	} catch {
+		return ""; // a malformed escape: treat as the bare URL
+	}
+}
 
 /** The track this URL asks for. A bare / redirects in place to /<slug> so later share links carry it. */
 function pickTrack(tracks: TrackIndexEntry[], cfg: AppConfig, state: PersistedState): TrackIndexEntry {
 	const find = (slug: string | undefined): TrackIndexEntry | undefined => tracks.find((t) => t.slug === slug);
 	const fallback = find(cfg.defaultTrack) ?? tracks[0];
-	let segment = location.pathname.split("/").filter(Boolean)[0] ?? "";
-	try {
-		segment = decodeURIComponent(segment).toLowerCase();
-	} catch {
-		segment = ""; // a malformed escape: treat as the bare URL
-	}
-	if (segment === "index.html") segment = "";
+	const segment = firstSegment();
 	if (segment) {
 		// Keep the URL: an unknown name may be a track this (cached) list doesn't know yet.
 		const hit = find(segment);
@@ -42,7 +47,30 @@ function pickTrack(tracks: TrackIndexEntry[], cfg: AppConfig, state: PersistedSt
 	return entry;
 }
 
+/** ?draft=<id>: show an editor draft (from this browser's IndexedDB) instead of the published track. */
+async function draftPreview(tracks: TrackIndexEntry[]): Promise<{ doc: TrackDoc; tiles: TileSource } | null> {
+	const id = new URLSearchParams(location.search).get("draft");
+	if (!id) return null;
+	const { getDraft } = await import("./editor/drafts.js");
+	const draft = await getDraft(id).catch(() => undefined);
+	if (!draft) return null;
+	const entry = id.startsWith("new-") ? undefined : tracks.find((t) => t.slug === draft.doc.slug);
+	const tiles: TileSource | undefined =
+		entry?.tiles ?? (draft.photo ? { type: "image", url: URL.createObjectURL(draft.photo) } : undefined);
+	if (!tiles) return null;
+	const banner = document.createElement("div");
+	banner.className = "draft-banner";
+	banner.textContent = "Preview of an unsaved draft";
+	document.body.appendChild(banner);
+	return { doc: readTrackDoc(draft.doc), tiles };
+}
+
 async function init(): Promise<void> {
+	if (firstSegment() === "admin") {
+		const { startEditor } = await import("./editor/editor.js");
+		return startEditor();
+	}
+
 	// Only some contexts need the drawer to clear the OS bottom strip (see usesBottomSafeArea
 	// and body.safe-area-bottom in style.css); default is a plain 12px gap.
 	if (usesBottomSafeArea()) document.body.classList.add("safe-area-bottom");
@@ -66,9 +94,11 @@ async function init(): Promise<void> {
 
 	const tracks: TrackIndexEntry[] = await fetch("/tracks/index.json").then((r) => r.json());
 	if (tracks.length === 0) throw new Error("no tracks in /tracks/index.json");
-	const entry = pickTrack(tracks, cfg, state);
-	const doc = readTrackDoc(await fetch(entry.doc).then((r) => r.json()));
-	state.lastTrack = doc.slug;
+	const preview = await draftPreview(tracks);
+	const entry = preview ? undefined : pickTrack(tracks, cfg, state);
+	const doc = preview?.doc ?? readTrackDoc(await fetch(entry!.doc).then((r) => r.json()));
+	const tiles = preview?.tiles ?? entry!.tiles;
+	if (!preview) state.lastTrack = doc.slug;
 
 	// A shared link (?s=…) overrides settings + (v2) the view, then is stripped from the URL.
 	const shared = decodeShareState(location.search);
@@ -95,7 +125,7 @@ async function init(): Promise<void> {
 		container,
 		cfg,
 		doc,
-		entry.tiles,
+		tiles,
 		line?.id,
 		state,
 		(x, y, zoom, rotation) => {
@@ -141,7 +171,7 @@ async function init(): Promise<void> {
 	drawApi.setEnabled(true);
 	compassApi.setEnabled(true);
 	replayApi.setEnabled(doc.lines.length > 0);
-	warmOfflineCache(entry, doc);
+	if (entry) warmOfflineCache(entry, doc);
 
 	// Apply UI text now and on every language change (covers panel, modal, FAB, title).
 	registerI18n(() => {

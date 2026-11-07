@@ -59,7 +59,21 @@ Each track is a folder under `tracks/`; the folder name is its address (`tracks/
 
 4. Run `npm run dev` and open `/mytrack`. Edits to `track.json` show on reload.
 
-An in-app editor that writes these files is on the way; `src/import/inkscape.ts` converts an Inkscape SVG (it produced the Tremblant track).
+The track editor below writes these same files, so you rarely need to edit them by hand. (`src/import/inkscape.ts` converted the original Inkscape art into the Tremblant track.)
+
+## Track editor
+
+Run `npm run dev` and open [http://localhost:5173/admin](http://localhost:5173/admin). Pick a track, or choose a photo to start a new one.
+
+- **Select** (V): click a point, zone or marker to select it and drag it. Dragging a point's round handles shapes the curve (hold Alt for a sharp corner). F zooms to the selection, Delete removes it, Ctrl+Z / Ctrl+Y undo and redo.
+- **Line points** (P): click on the line to add a point, or beside the selected point to add the next one. **New line** (panel) draws a line from scratch: click its points in driving order, then Done.
+- **Speeds**: select a point and type its km/h in the panel. The replay accelerates evenly between points with a speed. Speeds and the lap time appear only in the editor, never in the viewer.
+- **Braking zone** (B): click where braking starts on the line, then where it ends. **Passing zone** (G): click along the track, then Done. **Marker** (M): pick an icon from the palette, then click the map. Select a marker to swap its icon.
+- **Track** (panel): name, web address (new tracks only), lap length (sets the map scale), north.
+- Edits are kept as a draft in this browser until you Save. **Preview** opens the draft in the viewer.
+- **On this machine under `npm run dev`**, Save writes straight into `tracks/<slug>/` (a new photo is tiled right away, which needs libvips like `npm run tiles`).
+- **Anywhere else** (another device on the LAN, a deployed site), Save downloads a zip instead: unzip it at the repo root and run `npm run tiles` if the photo changed.
+- `/admin` is open on every deployment. It only works in the visitor's own browser and can't change anything on the server.
 
 ## Project Structure
 

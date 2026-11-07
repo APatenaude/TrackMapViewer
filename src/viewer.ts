@@ -20,7 +20,7 @@ export function initViewer(
 	container: HTMLElement,
 	cfg: AppConfig,
 	doc: TrackDoc,
-	tileSource: string,
+	tileSource: TileSource,
 	lineId: string | undefined,
 	state: PersistedState,
 	onViewChange: (x: number, y: number, zoom: number, rotation: number) => void,
@@ -42,36 +42,7 @@ export function initViewer(
 
 	let upright: UprightController | null = null;
 
-	const viewer = new OpenSeadragon.Viewer({
-		element: container,
-		tileSources: tileSource,
-		showNavigator: false,
-		maxZoomPixelRatio: 2.5, // zoom past native pixels (OSD's ~1.1 default is too low on desktop)
-		animationTime: 0.4,
-		springStiffness: 7,
-		gestureSettingsTouch: {
-			pinchToZoom: true,
-			flickEnabled: true,
-			// Tame the post-release glide: harder to trigger (default 120), carries less (default 0.25).
-			flickMinSpeed: 300,
-			flickMomentum: 0.1,
-			dblClickToZoom: false,
-			clickToZoom: false,
-		} as OpenSeadragon.GestureSettings,
-		gestureSettingsMouse: {
-			scrollToZoom: true,
-			clickToZoom: false,
-			dblClickToZoom: false,
-		} as OpenSeadragon.GestureSettings,
-		// Let the image pan partly off-screen (to center a corner) instead of snapping back.
-		visibilityRatio: 0.5,
-		constrainDuringPan: false,
-		minZoomImageRatio: 0.5,
-		showRotationControl: false,
-		showZoomControl: false,
-		showHomeControl: false,
-		showFullPageControl: false,
-	});
+	const viewer = createOsd(container, tileSource);
 
 	const setRotation = (degrees: number, immediately = true): void => {
 		setViewportRotation(viewer.viewport, degrees, immediately);
@@ -122,4 +93,41 @@ export function initViewer(
 			upright?.refresh();
 		},
 	};
+}
+
+/** Tile source: a DZI URL, or a single local image (`{ type: "image", url }`) before it is tiled. */
+export type TileSource = string | { type: "image"; url: string };
+
+/** The map viewer with the app's gesture and zoom settings (shared with the editor). */
+export function createOsd(container: HTMLElement, tileSource: TileSource): OpenSeadragon.Viewer {
+	return new OpenSeadragon.Viewer({
+		element: container,
+		tileSources: tileSource as OpenSeadragon.Options["tileSources"],
+		showNavigator: false,
+		maxZoomPixelRatio: 2.5, // zoom past native pixels (OSD's ~1.1 default is too low on desktop)
+		animationTime: 0.4,
+		springStiffness: 7,
+		gestureSettingsTouch: {
+			pinchToZoom: true,
+			flickEnabled: true,
+			// Tame the post-release glide: harder to trigger (default 120), carries less (default 0.25).
+			flickMinSpeed: 300,
+			flickMomentum: 0.1,
+			dblClickToZoom: false,
+			clickToZoom: false,
+		} as OpenSeadragon.GestureSettings,
+		gestureSettingsMouse: {
+			scrollToZoom: true,
+			clickToZoom: false,
+			dblClickToZoom: false,
+		} as OpenSeadragon.GestureSettings,
+		// Let the image pan partly off-screen (to center a corner) instead of snapping back.
+		visibilityRatio: 0.5,
+		constrainDuringPan: false,
+		minZoomImageRatio: 0.5,
+		showRotationControl: false,
+		showZoomControl: false,
+		showHomeControl: false,
+		showFullPageControl: false,
+	});
 }

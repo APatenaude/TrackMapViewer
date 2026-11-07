@@ -1,4 +1,4 @@
-import { cubicAt, flattenLine, type Cubic } from "../lineGeometry.js";
+import { cubicAt, flattenLine, splitCubic, type Cubic } from "../lineGeometry.js";
 import { createPolylineSampler, type PathSampler, type Point } from "../replayPath.js";
 import { TRACK_SCHEMA, type LineNode, type Marker, type TrackDoc, type Vec, type Zone } from "../trackDoc.js";
 import type { LocalizedString } from "../types.js";
@@ -318,20 +318,6 @@ function splitAt(segs: Cubic[], cuts: number[], snapU: number): { segs: Cubic[];
 	});
 	for (const [u, i] of atNode) cutIndex.set(u, firstOut[i]);
 	return { segs: out, cutIndex };
-}
-
-function splitCubic(s: Cubic, t: number): [Cubic, Cubic] {
-	const lerp = (a: Point, b: Point): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-	const a = lerp(s.p0, s.c1);
-	const b = lerp(s.c1, s.c2);
-	const c = lerp(s.c2, s.p1);
-	const d = lerp(a, b);
-	const e = lerp(b, c);
-	const f = lerp(d, e);
-	return [
-		{ p0: s.p0, c1: a, c2: d, p1: f },
-		{ p0: f, c1: e, c2: c, p1: s.p1 },
-	];
 }
 
 // ---------------------------------------------------------------- helpers

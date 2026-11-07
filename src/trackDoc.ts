@@ -72,8 +72,10 @@ export interface Marker {
 	text?: string;
 	/** corner: badge diameter; label: font size; others: symbol scale (1 = built-in size). Image px. */
 	size?: number;
-	/** Imported artwork, centred on (0,0) in image px. Omitted = the kind's built-in symbol. */
+	/** Imported artwork, centred on (0,0) in image px. Wins over `icon`. */
 	svg?: string;
+	/** Built-in icon id (src/markerIcons.ts). Omitted (and no `svg`) = the kind's default symbol. */
+	icon?: string;
 	/** Belongs to this line (shown only with it). Omitted = shown with every line. */
 	line?: string;
 }
@@ -120,8 +122,9 @@ export function readTrackDoc(raw: unknown): TrackDoc {
 	} as TrackDoc;
 }
 
-/** Track URLs are /<slug>: lowercase, and not one of the app's own paths. */
-export const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+/** Track URLs are /<slug>: lowercase, short (it is also a folder name), and not one of the app's own paths. */
+export const SLUG_MAX = 48;
+export const SLUG_RE = new RegExp(`^[a-z0-9][a-z0-9-]{0,${SLUG_MAX - 1}}$`);
 export const RESERVED_SLUGS = new Set([
 	"assets",
 	"icons",
@@ -134,6 +137,10 @@ export const RESERVED_SLUGS = new Set([
 	"workbox",
 ]);
 
+export function slugProblem(slug: string): string {
+	return `slug "${slug}" must be up to ${SLUG_MAX} lowercase a-z, 0-9 and dashes, and not one of ${[...RESERVED_SLUGS].join(", ")}`;
+}
+
 const MARKER_KINDS = new Set<string>(["corner", "label", "apex", "reference", "crest", "car"]);
 const num = (v: unknown): boolean => typeof v === "number" && Number.isFinite(v);
 const vec = (v: unknown): boolean => Array.isArray(v) && v.length === 2 && num(v[0]) && num(v[1]);
@@ -141,9 +148,7 @@ const vec = (v: unknown): boolean => Array.isArray(v) && v.length === 2 && num(v
 /** Everything wrong with a document that readTrackDoc lets through (empty = fine). The build refuses any. */
 export function trackDocProblems(doc: TrackDoc): string[] {
 	const out: string[] = [];
-	if (!SLUG_RE.test(doc.slug) || RESERVED_SLUGS.has(doc.slug)) {
-		out.push(`slug "${doc.slug}" must be lowercase a-z, 0-9, dashes and not one of ${[...RESERVED_SLUGS].join(", ")}`);
-	}
+	if (!SLUG_RE.test(doc.slug) || RESERVED_SLUGS.has(doc.slug)) out.push(slugProblem(doc.slug));
 	const nodesProblem = (nodes: unknown, what: string, min: number): void => {
 		if (!Array.isArray(nodes) || nodes.length < min) {
 			out.push(`${what} needs at least ${min} nodes`);

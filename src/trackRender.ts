@@ -1,4 +1,5 @@
-import { flattenLine, linePathD } from "./lineGeometry.js";
+import { flattenLine, linePathD, type FlatLine } from "./lineGeometry.js";
+import { markerIcon } from "./markerIcons.js";
 import { createPolylineSampler, type PathSampler, type Point } from "./replayPath.js";
 import type { BrakingZone, Marker, MarkerKind, PassingZone, RacingLine, TrackDoc } from "./trackDoc.js";
 
@@ -69,6 +70,7 @@ export interface LineTrace {
 	sampler: PathSampler;
 	/** Arc-length (image px) of each node along the loop, node 0 = 0. */
 	nodeDist: number[];
+	flat: FlatLine;
 }
 
 /** Cached per line object: flattening is the expensive part of a render or replay. */
@@ -78,7 +80,7 @@ export function lineTrace(line: RacingLine): LineTrace {
 	if (!tr) {
 		const flat = flattenLine(line.nodes);
 		const sampler = createPolylineSampler(flat.points);
-		tr = { sampler, nodeDist: flat.nodeIndex.map((i) => sampler.distanceOf(i)) };
+		tr = { sampler, nodeDist: flat.nodeIndex.map((i) => sampler.distanceOf(i)), flat };
 		traceCache.set(line, tr);
 	}
 	return tr;
@@ -91,23 +93,32 @@ export function createLayerGroups(): Map<LayerGroupId, SVGGElement> {
 	return groups;
 }
 
+export interface RenderResult {
+	/** Braking zones that couldn't be drawn (their ends no longer fit the line). */
+	skipped: string[];
+}
+
 /**
  * Draw `doc` into the layer groups, showing only `lineId` (its line, braking zones and
- * line-bound markers). `defs` receives the gradients.
+ * line-bound markers). `defs` receives the gradients. `only` redraws just those groups
+ * (the editor, during a drag).
  */
 export function renderTrack(
 	doc: TrackDoc,
 	lineId: string | undefined,
 	groups: Map<LayerGroupId, SVGGElement>,
 	defs: SVGDefsElement,
-): void {
-	for (const g of groups.values()) g.replaceChildren();
-	defs.replaceChildren();
+	only?: ReadonlySet<LayerGroupId>,
+): RenderResult {
+	const want = (id: LayerGroupId): boolean => !only || only.has(id);
+	for (const [id, g] of groups) if (want(id)) g.replaceChildren();
+	if (want("braking")) defs.replaceChildren();
+	const skipped: string[] = [];
 	const px = (m: number): number => m / (doc.metersPerPixel ?? REF_MPP);
 	const line = doc.lines.find((l) => l.id === lineId) ?? doc.lines[0];
 	const linesById = new Map(doc.lines.map((l) => [l.id, l]));
 
-	if (line && line.nodes.length >= 2) {
+	if (want("racing_line") && line && line.nodes.length >= 2) {
 		const d = linePathD(line.nodes);
 		const g = groups.get("racing_line")!;
 		g.appendChild(el("path", { d, fill: "none", stroke: "#000", "stroke-width": r1(px(LINE_CASING_M)) }));
@@ -118,19 +129,27 @@ export function renderTrack(
 	// only warns): skip what can't be drawn instead of losing the whole map.
 	for (const zone of doc.zones) {
 		if (zone.kind === "braking") {
-			if (!line || zone.line !== line.id || line.nodes.length < 2 || !zone.from || !zone.to) continue;
+			if (!want("braking") || !line || zone.line !== line.id || line.nodes.length < 2 || !zone.from || !zone.to)
+				continue;
 			const node = brakingZone(zone, line, defs, px);
 			if (node) groups.get("braking")!.appendChild(node);
-		} else if (zone.kind === "passing" && Array.isArray(zone.nodes) && zone.nodes.length >= 2) {
+			else skipped.push(zone.id);
+		} else if (
+			want("passing_zones") &&
+			zone.kind === "passing" &&
+			Array.isArray(zone.nodes) &&
+			zone.nodes.length >= 2
+		) {
 			groups.get("passing_zones")!.appendChild(passingZone(zone, px));
 		}
 	}
 
 	for (const m of doc.markers) {
 		if (m.line && (!line || m.line !== line.id)) continue;
-		const group = groups.get(MARKER_GROUP[m.kind]);
-		if (group) group.appendChild(marker(m, m.line ? linesById.get(m.line) : undefined, px));
+		const id = MARKER_GROUP[m.kind];
+		if (id && want(id)) groups.get(id)!.appendChild(marker(m, m.line ? linesById.get(m.line) : undefined, px));
 	}
+	return { skipped };
 }
 
 function brakingZone(
@@ -268,21 +287,34 @@ function marker(m: Marker, line: RacingLine | undefined, px: (m: number) => numb
 	// Imported art is already at image scale; built-ins are drawn at REF_MPP.
 	const scale = (m.size ?? 1) * (m.svg ? 1 : px(REF_MPP));
 	if (scale !== 1) inner.setAttribute("transform", `scale(${Math.round(scale * 1000) / 1000})`);
-	appendArt(inner, m.svg ?? BUILTIN[m.kind]);
+	appendArt(inner, m.svg ?? markerIcon(m.icon)?.svg ?? BUILTIN[m.kind]);
 	g.appendChild(inner);
 	return g;
 }
 
 const ART_TAGS = new Set(["g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "text", "tspan"]);
 
+// Parsed + cleaned art per markup string: a render reuses it instead of re-parsing every marker.
+const artCache = new Map<string, Element | null>();
+
+function appendArt(parent: SVGGElement, markup: string): void {
+	let root = artCache.get(markup);
+	if (root === undefined) {
+		root = parseArt(markup);
+		artCache.set(markup, root);
+	}
+	if (!root) return;
+	for (const child of Array.from(root.childNodes)) parent.appendChild(document.importNode(child, true));
+}
+
 /**
  * Parse marker art in an inert document and keep only plain drawing elements: no scripts,
  * handlers or links, no ids (one could shadow a layer group's), and no url() (an external
  * one would make every viewer fetch it; internal ones have no ids left to point at).
  */
-function appendArt(parent: SVGGElement, markup: string): void {
+function parseArt(markup: string): Element | null {
 	const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${markup}</svg>`, "image/svg+xml");
-	if (doc.querySelector("parsererror")) return;
+	if (doc.querySelector("parsererror")) return null;
 	const clean = (node: Element): void => {
 		for (const child of Array.from(node.children)) {
 			if (!ART_TAGS.has(child.localName)) child.remove();
@@ -296,5 +328,5 @@ function appendArt(parent: SVGGElement, markup: string): void {
 		}
 	};
 	clean(doc.documentElement);
-	for (const child of Array.from(doc.documentElement.childNodes)) parent.appendChild(document.importNode(child, true));
+	return doc.documentElement;
 }

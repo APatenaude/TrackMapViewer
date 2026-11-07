@@ -754,3 +754,20 @@ body.safe-area-bottom .panel {
 		0 0 0 3px color-mix(in srgb, var(--c-accent) 35%, transparent),
 		var(--shadow-fab);
 }
+
+/* ?draft= preview from the editor: a reminder this isn't the published track. */
+.draft-banner {
+	position: fixed;
+	top: calc(env(safe-area-inset-top, 0px) + 10px);
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 400;
+	padding: 6px 14px;
+	border-radius: 999px;
+	background: #ffd400;
+	color: #000;
+	font:
+		600 13px/1.2 system-ui,
+		sans-serif;
+	pointer-events: none;
+}
