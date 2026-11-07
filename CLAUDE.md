@@ -2,6 +2,8 @@
 
 Mobile-first deep-zoom race track map viewer. Tiled raster background (DZI) with SVG vector layers (racing line, braking zones, etc.) drawn at runtime from a per-track JSON document. Several tracks, one URL each (`/<slug>`). Self-hosted PWA via Docker/Portainer + Traefik.
 
+**Read `HANDOFF.md` when you start a session:** machine setup, how to release, product decisions, next work, and the owner's pending tests (remind them until they clear the list).
+
 ## Stack
 
 - **Vite 5 + vanilla TypeScript** - no UI framework
