@@ -102,6 +102,8 @@ export interface TrackDoc {
 	metersPerPixel?: number;
 	/** Bearing of true north in the image (deg clockwise from image-up). Aims the compass needle only. */
 	northOffset?: number;
+	/** Left out of the track lists; the /<slug> link and QR code still open it. */
+	unlisted?: boolean;
 	lines: RacingLine[];
 	zones: Zone[];
 	markers: Marker[];
@@ -193,6 +195,7 @@ export function trackDocProblems(doc: TrackDoc): string[] {
 export interface TrackIndexEntry {
 	slug: string;
 	name: LocalizedString;
+	unlisted?: boolean;
 	/** URL of the track document. */
 	doc: string;
 	/** URL of the DZI tile source (folder name carries the image hash, so a new image never hits old cached tiles). */

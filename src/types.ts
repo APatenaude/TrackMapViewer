@@ -52,8 +52,6 @@ export interface ReplaySpeedPoint {
 /** App-wide settings (public/config.json). Everything about a track lives in its track.json. */
 export interface AppConfig {
 	title: LocalizedString;
-	/** Track shown at the bare URL (and for unknown track names). Defaults to the first track. */
-	defaultTrack?: string;
 	/** Layer toggles; ids are the overlay group ids (see trackRender.ts LAYER_GROUP_IDS). */
 	layers: LayerConfig[];
 	analytics?: AnalyticsConfig;

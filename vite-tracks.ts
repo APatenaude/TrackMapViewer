@@ -86,6 +86,7 @@ function loadTracks(): { tracks: LoadedTrack[]; errors: string[] } {
 				entry: {
 					slug,
 					name: doc.name,
+					...(doc.unlisted ? { unlisted: true } : {}),
 					// ?v= follows the content: the URL can be cached forever and a new deploy still shows.
 					doc: `/tracks/${slug}/track.json?v=${sha1(json).slice(0, 8)}`,
 					tiles: `/tracks/${slug}/${tiles.dzi}`,

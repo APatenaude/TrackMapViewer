@@ -30,21 +30,47 @@ function firstSegment(): string {
 	}
 }
 
-/** The track this URL asks for. A bare / redirects in place to /<slug> so later share links carry it. */
-function pickTrack(tracks: TrackIndexEntry[], cfg: AppConfig, state: PersistedState): TrackIndexEntry {
+/**
+ * The track this URL asks for, else the visitor's last one, else the only listed one.
+ * None means the visitor has to choose. A bare / redirects in place to /<slug> so later share links carry it.
+ */
+function pickTrack(tracks: TrackIndexEntry[], state: PersistedState): TrackIndexEntry | undefined {
 	const find = (slug: string | undefined): TrackIndexEntry | undefined => tracks.find((t) => t.slug === slug);
-	const fallback = find(cfg.defaultTrack) ?? tracks[0];
+	const listed = tracks.filter((t) => !t.unlisted);
+	const fallback = find(state.lastTrack) ?? (listed.length === 1 ? listed[0] : undefined);
 	const segment = firstSegment();
 	if (segment) {
 		// Keep the URL: an unknown name may be a track this (cached) list doesn't know yet.
 		const hit = find(segment);
-		if (!hit) console.warn(`track "${segment}" not found, showing ${fallback.slug}`);
+		if (!hit) console.warn(`track "${segment}" not found`);
 		return hit ?? fallback;
 	}
 	const legacy = new URLSearchParams(location.search).has("s") ? find(LEGACY_TRACK) : undefined;
-	const entry = legacy ?? find(state.lastTrack) ?? fallback;
-	history.replaceState(null, "", `/${entry.slug}${location.search}${location.hash}`);
+	const entry = legacy ?? fallback;
+	if (entry) history.replaceState(null, "", `/${entry.slug}${location.search}${location.hash}`);
 	return entry;
+}
+
+/** First visit with several tracks: opening one remembers it (state.lastTrack). */
+function showTrackChooser(tracks: TrackIndexEntry[]): void {
+	const root = document.createElement("main");
+	root.className = "track-chooser";
+	const title = document.createElement("h1");
+	title.dataset.i18n = "chooseTrack";
+	root.appendChild(title);
+	for (const t of tracks.filter((x) => !x.unlisted)) {
+		const link = document.createElement("a");
+		link.href = `/${encodeURIComponent(t.slug)}`;
+		const thumb = document.createElement("img");
+		thumb.src = `${t.tiles.replace(/\.dzi$/, "_files")}/8/0_0.jpg`;
+		thumb.alt = "";
+		const name = document.createElement("span");
+		name.textContent = pick(t.name);
+		link.append(thumb, name);
+		root.appendChild(link);
+	}
+	translateTree(root);
+	document.body.appendChild(root);
 }
 
 /** ?draft=<id>: show an editor draft (from this browser's IndexedDB) instead of the published track. */
@@ -95,7 +121,11 @@ async function init(): Promise<void> {
 	const tracks: TrackIndexEntry[] = await fetch("/tracks/index.json").then((r) => r.json());
 	if (tracks.length === 0) throw new Error("no tracks in /tracks/index.json");
 	const preview = await draftPreview(tracks);
-	const entry = preview ? undefined : pickTrack(tracks, cfg, state);
+	const entry = preview ? undefined : pickTrack(tracks, state);
+	if (!preview && !entry) {
+		document.title = pick(cfg.title);
+		return showTrackChooser(tracks);
+	}
 	const doc = preview?.doc ?? readTrackDoc(await fetch(entry!.doc).then((r) => r.json()));
 	const tiles = preview?.tiles ?? entry!.tiles;
 	if (!preview) state.lastTrack = doc.slug;
@@ -141,7 +171,7 @@ async function init(): Promise<void> {
 	let onLineChange = (_id: string): void => {};
 	const layers = initLayers(cfg, svgEl, state, () => saveState(state), {
 		onOpenChange: (open) => fab.setPanelOpen(open),
-		tracks: tracks.map((t) => ({ id: t.slug, name: t.name })),
+		tracks: tracks.filter((t) => !t.unlisted || t.slug === doc.slug).map((t) => ({ id: t.slug, name: t.name })),
 		currentTrack: doc.slug,
 		lines: doc.lines.map((l) => ({ id: l.id, name: l.name })),
 		currentLine: line?.id,

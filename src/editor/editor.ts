@@ -48,7 +48,7 @@ async function showOpenScreen(tracks: TrackIndexEntry[]): Promise<void> {
 				tracks
 					.map(
 						(t) =>
-							`<button class="ed-open-item" data-open="${t.slug}"><b>${escHtml(name(t.name, t.slug))}</b> <span>/${t.slug}</span>${
+							`<button class="ed-open-item" data-open="${t.slug}"><b>${escHtml(name(t.name, t.slug))}</b> <span>/${t.slug}${t.unlisted ? " (link only)" : ""}</span>${
 								draftFor.has(t.slug) ? `<em>unsaved changes from ${when(draftFor.get(t.slug)!.updated)}</em>` : ""
 							}</button>`,
 					)

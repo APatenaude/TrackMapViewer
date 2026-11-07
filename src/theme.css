@@ -3,6 +3,7 @@
 :root {
 	/* Backdrops */
 	--c-bg: #000; /* dark page / viewer backdrop behind the map */
+	--c-on-bg: #fff; /* text directly on --c-bg */
 	--c-surface: #f7f8fa; /* panel, header, and modal background (light) */
 	--c-surface-2: #e9ecf1; /* buttons, segmented toggle, slider track */
 	--c-surface-3: #dde1e8; /* button hover */

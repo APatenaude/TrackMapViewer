@@ -69,21 +69,32 @@ Run `npm run dev` and open [http://localhost:5173/admin](http://localhost:5173/a
 - **Line points** (P): click on the line to add a point, or beside the selected point to add the next one. **New line** (panel) draws a line from scratch: click its points in driving order, then Done.
 - **Speeds**: select a point and type its km/h in the panel. The replay accelerates evenly between points with a speed. Speeds and the lap time appear only in the editor, never in the viewer.
 - **Braking zone** (B): click where braking starts on the line, then where it ends. **Passing zone** (G): click along the track, then Done. **Marker** (M): pick an icon from the palette, then click the map. Select a marker to swap its icon.
-- **Track** (panel): name, web address (new tracks only), lap length (sets the map scale), north.
+- **Track** (panel): name, web address (new tracks only), lap length (sets the map scale), north. **Link only** hides the track from the track list while its web address and QR code keep working.
 - Edits are kept as a draft in this browser until you Save. **Preview** opens the draft in the viewer.
 - **On this machine under `npm run dev`**, Save writes straight into `tracks/<slug>/` (a new photo is tiled right away, which needs libvips like `npm run tiles`).
 - **Anywhere else** (another device on the LAN, a deployed site), Save downloads a zip instead: unzip it at the repo root and run `npm run tiles` if the photo changed.
 - `/admin` is open on every deployment. It only works in the visitor's own browser and can't change anything on the server.
+
+## Publishing tracks
+
+From `main`, run `npm run publish-tracks` (add `-- --dry-run` to rehearse). It checks that everything builds, commits `tracks/`, tags the next version and pushes; the tag builds the Docker image. When the build finishes, pull the new image in your deployment.
+
+A few things are plain file edits, followed by `npm run publish-tracks`:
+
+- **Delete a track:** delete `tracks/<slug>/`.
+- **Replace a photo:** overwrite `tracks/<slug>/image.jpg` with an image of the same size (points are stored in image pixels).
+- **Change a web address:** rename `tracks/<slug>/` and set the same `slug` in its `track.json`. Old links and QR codes stop working.
 
 ## Project Structure
 
 ```
 tracks/<slug>/            # one folder per track: track.json + image.jpg
 public/
-  config.json             # app-wide settings: title, default track, layer toggles
+  config.json             # app-wide settings: title, layer toggles
   icons/                  # PWA icons
   tracks/                 # generated DZI tiles (gitignored)
 scripts/tiles.mjs         # tiles every track image (libvips)
+scripts/publish.mjs       # commits tracks/, tags the next version, pushes
 vite-tracks.ts            # serves / validates / emits the track documents
 src/
   main.ts                 # bootstrap: pick the track from the URL
@@ -106,6 +117,7 @@ src/
 | `npm run dev`     | Dev server with hot reload                                     |
 | `npm run build`   | Production build → `dist/` (fails on an invalid track.json)   |
 | `npm run preview` | Preview production build (tests PWA/SW)                        |
+| `npm run publish-tracks` | Commit `tracks/`, tag the next version and push (from `main`) |
 
 ## Deploy
 

@@ -343,7 +343,7 @@ export function duplicateMarker(
 
 export function setTrack(
 	doc: TrackDoc,
-	patch: Partial<Pick<TrackDoc, "name" | "slug" | "northOffset" | "metersPerPixel">>,
+	patch: Partial<Pick<TrackDoc, "name" | "slug" | "northOffset" | "metersPerPixel" | "unlisted">>,
 ): TrackDoc {
 	const next = { ...doc, ...patch };
 	for (const [k, v] of Object.entries(patch))

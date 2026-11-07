@@ -121,6 +121,7 @@ const track = record([
 	],
 	["metersPerPixel", num(6)],
 	["northOffset", num(1)],
+	["unlisted", plain],
 	[
 		"lines",
 		list(

@@ -295,7 +295,9 @@ function trackHtml(host: PanelHost, doc: TrackDoc): string {
 		${host.isNew() ? `<p class="ed-muted">Lowercase letters, digits and dashes. Can't change after the first save (links and QR codes use it).</p>` : ""}
 		<label class="ed-field">Lap length <input type="number" min="100" step="1" data-field="t-lap" value="${lapM}" ${lenPx ? "" : "disabled"} placeholder="meters" /> m</label>
 		<p class="ed-muted">${lenPx ? `Measured along ${esc(lineName(doc, line!.id))}: sets the map scale${doc.metersPerPixel ? ` (${doc.metersPerPixel.toFixed(4)} m per pixel)` : ""}.` : "Draw a line first."}</p>
-		<label class="ed-field">North <input type="number" step="1" data-field="t-north" value="${doc.northOffset ?? 0}" /> &deg; <span class="ed-muted">clockwise from the top of the photo</span></label>`;
+		<label class="ed-field">North <input type="number" step="1" data-field="t-north" value="${doc.northOffset ?? 0}" /> &deg; <span class="ed-muted">clockwise from the top of the photo</span></label>
+		<label class="ed-check"><input type="checkbox" data-field="t-unlisted" ${doc.unlisted ? "checked" : ""} /> Link only</label>
+		<p class="ed-muted">Hidden from the track list; its web address and QR code still open it.</p>`;
 }
 
 function checkHtml(host: PanelHost, doc: TrackDoc): string {
@@ -478,6 +480,9 @@ function onChange(host: PanelHost, input: HTMLInputElement): void {
 					northOffset: num !== undefined && Number.isFinite(num) ? ((num % 360) + 360) % 360 : undefined,
 				}),
 			);
+			return;
+		case "t-unlisted":
+			store.commit(setTrack(doc, { unlisted: input.checked || undefined }));
 			return;
 		case "t-lap": {
 			const line = lineById(doc, store.activeLine);

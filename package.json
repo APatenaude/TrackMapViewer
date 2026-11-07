@@ -1,22 +1,23 @@
 {
-  "name": "track-map",
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview --host",
-    "tiles": "node scripts/tiles.mjs"
-  },
-  "dependencies": {
-    "openseadragon": "^4.1.0",
-    "qrcode": "^1.5.4"
-  },
-  "devDependencies": {
-    "@types/openseadragon": "^3.0.10",
-    "@types/qrcode": "^1.5.5",
-    "typescript": "^5.4.5",
-    "vite": "^5.2.11",
-    "vite-plugin-pwa": "^0.20.5"
-  }
+	"name": "track-map",
+	"version": "1.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite --host",
+		"build": "vite build",
+		"preview": "vite preview --host",
+		"tiles": "node scripts/tiles.mjs",
+		"publish-tracks": "node scripts/publish.mjs"
+	},
+	"dependencies": {
+		"openseadragon": "^4.1.0",
+		"qrcode": "^1.5.4"
+	},
+	"devDependencies": {
+		"@types/openseadragon": "^3.0.10",
+		"@types/qrcode": "^1.5.5",
+		"typescript": "^5.4.5",
+		"vite": "^5.2.11",
+		"vite-plugin-pwa": "^0.20.5"
+	}
 }

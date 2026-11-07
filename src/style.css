@@ -771,3 +771,49 @@ body.safe-area-bottom .panel {
 		sans-serif;
 	pointer-events: none;
 }
+
+/* First visit with several tracks. */
+.track-chooser {
+	position: fixed;
+	inset: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: calc(env(safe-area-inset-top, 0px) + 32px) 20px calc(env(safe-area-inset-bottom, 0px) + 32px);
+	background: var(--c-bg);
+}
+.track-chooser h1 {
+	margin: 0 auto 12px;
+	width: min(100%, 460px);
+	color: var(--c-on-bg);
+	font-size: 24px;
+}
+.track-chooser a {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 14px;
+	margin: 0 auto;
+	width: min(100%, 460px);
+	padding: 10px;
+	border: 1px solid var(--c-border);
+	border-radius: 12px;
+	background: var(--c-surface);
+	color: var(--c-text);
+	font-size: 17px;
+	font-weight: 600;
+	text-decoration: none;
+}
+.track-chooser img {
+	flex: none;
+	width: 60px;
+	height: 60px;
+	border-radius: 8px;
+	object-fit: cover;
+	background: var(--c-surface-2);
+}
+.track-chooser span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}

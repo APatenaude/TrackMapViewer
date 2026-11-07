@@ -1,6 +1,5 @@
 {
 	"title": { "en": "Track Map", "fr": "Carte circuit" },
-	"defaultTrack": "tremblant",
 	"layers": [
 		{
 			"id": "corner_numbers",
