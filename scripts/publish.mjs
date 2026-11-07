@@ -43,7 +43,8 @@ execSync("npm run build", { stdio: "inherit" });
 
 const message = `Publish tracks: ${slugs.join(", ")}`;
 if (dryRun) {
-	console.log(`\nDry run: would commit "${message}" (${changed.length} changes), tag ${tag}, push to ${remote}.`);
+	const commit = slugs.length ? `commit "${message}" (${changed.length} changes), ` : "";
+	console.log(`\nDry run: would ${commit}tag ${tag}, push to ${remote}.`);
 	process.exit(0);
 }
 if (slugs.length) {
